@@ -1,4 +1,4 @@
-# AI 聊天前端
+﻿# AI 聊天前端
 
 基于 Vue 3 + Vite + Element Plus 的 AI 聊天系统前端，对接 Spring Boot 后端（API v5.0，Redis + MySQL + Ollama）。
 
