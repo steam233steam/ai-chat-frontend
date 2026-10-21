@@ -1,6 +1,6 @@
 # 后端待办
 
-> 后端代码在 `spring--ai---` 仓库，此文件仅作跨仓库协作备忘。
+> 后端代码在 [ai-chat-backend](https://github.com/steam233steam/ai-chat-backend) 仓库，此文件仅作跨仓库协作备忘。
 
 ## P1 - 功能
 

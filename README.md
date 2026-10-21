@@ -1,6 +1,8 @@
 ﻿# AI 聊天前端
 
-基于 Vue 3 + Vite + Element Plus 的 AI 聊天系统前端，对接 Spring Boot 后端（API v5.0，Redis + MySQL + Ollama）。
+[![Frontend CI](https://github.com/steam233steam/ai-chat-frontend/actions/workflows/ci.yml/badge.svg)](https://github.com/steam233steam/ai-chat-frontend/actions/workflows/ci.yml)
+
+基于 Vue 3 + Vite + Element Plus 的 AI 聊天系统前端，对接 [Spring Boot 后端](https://github.com/steam233steam/ai-chat-backend)（API v5.0，Redis + MySQL + Ollama）。
 
 ## 功能特性
 
@@ -57,6 +59,10 @@ src/
 ```bash
 npm test           # SSE 解析单元测试（node --test）
 ```
+
+## CI
+
+GitHub Actions 在每次 push 时执行 `npm ci`、`npm test`（SSE 解析 9 个用例）和 `npm run build`（`.github/workflows/ci.yml`）。
 
 ## 技术栈
 
