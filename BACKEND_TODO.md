@@ -4,16 +4,16 @@
 
 ## P1 - 功能
 
-- [ ] 消息落 MySQL，Redis 只做缓存（新建 `tb_chat_session` / `tb_chat_message`，写入双写、读取回填）
+- [x] 消息落 MySQL，Redis 只做缓存（✅ 2026-10-22 完成：MySQL 主存储 + Redis 7 天热缓存，读未命中自动回源；前端接口行为不变）
 - [ ] `/chat/ask-stream` 改为 POST（语义修正）
 - [ ] `Authorization` 加 `Bearer` 前缀（前后端同步修改）
 - [ ] 删除 / 清空会话接口分离
-- [ ] 统一 system prompt（非流式与流式目前不一致）
+- [x] 统一 system prompt（✅ ChatClientConfig 统一系统提示词）
+- [x] 全局异常处理（✅ GlobalExceptionHandler + BusinessException）
 
 ## P2 - 工程规范
 
-- [ ] 全局异常处理（`@RestControllerAdvice` + 业务异常）
-- [ ] 参数校验（`@Valid` + `@NotBlank`）
+- [x] 参数校验（✅ @Valid + 正则校验）
 - [ ] Swagger / OpenAPI 文档
 - [ ] 删除冗余代码（`utils/LoginInterceptor` 等未引用类）
 - [ ] 接口限流（验证码 / 登录 / 聊天频率限制）
