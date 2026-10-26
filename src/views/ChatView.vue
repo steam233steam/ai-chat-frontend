@@ -589,7 +589,7 @@ const handleSend = async () => {
   const userMsg = trimmedInput
 
   messages.value.push({
-    id: ++msgIdCounter,
+    id: `local_${Date.now()}_${++msgIdCounter}`,
     role: 'user',
     content: userMsg,
     timestamp: new Date()
@@ -601,7 +601,7 @@ const handleSend = async () => {
 
   // 创建一个临时的 AI 消息用于流式更新
   const aiMsg = reactive({
-    id: ++msgIdCounter,
+    id: `local_${Date.now()}_${++msgIdCounter}`,
     role: 'ai',
     content: '',
     html: '',
