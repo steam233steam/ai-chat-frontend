@@ -150,6 +150,11 @@
 
         <!-- 消息列表 -->
         <div v-else>
+          <!-- 加载更早历史提示（滚到顶部触发） -->
+          <div v-if="isLoadingOlder" class="load-older-tip">
+            <el-icon class="loading-icon" :size="18"><Loading /></el-icon>
+            <span>加载更早的消息...</span>
+          </div>
           <div
             v-for="msg in messages"
             :key="msg.id"
@@ -309,6 +314,10 @@ const onScroll = () => {
   const distance = el.scrollHeight - el.scrollTop - el.clientHeight
   isNearBottom.value = distance < 80
   showScrollBottom.value = distance > 200
+  // 滚动到顶部时加载更早一页历史
+  if (el.scrollTop < 10) {
+    loadOlderMessages()
+  }
 }
 
 // 中断当前流式请求
@@ -382,6 +391,12 @@ const generateSessionId = () => {
   return raw.slice(0, 64)
 }
 
+// 历史消息分页：每页条数
+const HISTORY_PAGE_SIZE = 30
+const hasMoreHistory = ref(false)
+const oldestServerId = ref(null)
+const isLoadingOlder = ref(false)
+
 // 浏览器前进/后退时路由参数会变，但组件实例被复用，需要手动同步会话
 watch(
   () => router.currentRoute.value.params.id,
@@ -407,42 +422,46 @@ const loadSessions = async () => {
   }
 }
 
+// 把一条历史接口返回项归一化成消息对象（兼容字符串数组与 v5/v6 对象结构）
+const toMessage = (item) => {
+  const normalized = typeof item === 'string'
+    ? { role: 'user', content: item, timestamp: null }
+    : item
+  if (!normalized || normalized.role === 'system') return null
+  const content = normalized.content ?? ''
+  const isAi = normalized.role !== 'user'
+  const msg = {
+    role: isAi ? 'ai' : 'user',
+    content,
+    // 历史消息只渲染一次 Markdown，避免流式输出时反复解析整个列表
+    html: isAi ? renderMarkdown(content) : '',
+    streaming: false,
+    timestamp: normalized.timestamp ? new Date(normalized.timestamp) : new Date()
+  }
+  // 服务端消息带自增 id，用它做渲染 key；本地/旧数据没有则用本地计数器
+  msg.id = typeof normalized.id === 'number' ? normalized.id : ++msgIdCounter
+  return msg
+}
+
+// 加载最新一页历史（用于切换会话 / 首次进入）
 const loadMessages = async () => {
   if (!currentChatId.value) return
-  
+
   isLoading.value = true
   try {
-    const res = await getHistory(currentChatId.value)
-    if (res.code === 200 && res.data) {
-      messages.value = []
-      msgIdCounter = 0
-      for (const item of res.data) {
-        // 兼容旧版字符串数组和 v5.0 对象结构
-        const normalized = typeof item === 'string'
-          ? { role: 'user', content: item, timestamp: null }
-          : item
-
-        if (!normalized) continue
-        if (normalized.role === 'system') continue
-
-        const content = normalized.content ?? ''
-        const isAi = normalized.role !== 'user'
-        messages.value.push({
-          id: ++msgIdCounter,
-          role: isAi ? 'ai' : 'user',
-          content,
-          // 历史消息只渲染一次 Markdown，避免流式输出时反复解析整个列表
-          html: isAi ? renderMarkdown(content) : '',
-          streaming: false,
-          timestamp: normalized.timestamp ? new Date(normalized.timestamp) : new Date()
-        })
-      }
-    } else {
-      messages.value = []
-    }
+    const res = await getHistory(currentChatId.value, { limit: HISTORY_PAGE_SIZE })
+    const items = res.code === 200 && res.data ? res.data : []
+    messages.value = items.map(toMessage).filter(Boolean)
+    msgIdCounter = messages.value.length
+    const ids = items.filter((i) => i && typeof i.id === 'number').map((i) => i.id)
+    // 正好一页 => 可能还有更早的数据；不足一页 => 没有更多
+    hasMoreHistory.value = ids.length === HISTORY_PAGE_SIZE
+    oldestServerId.value = ids.length ? Math.min(...ids) : null
   } catch (e) {
     console.error('加载消息失败', e)
     messages.value = []
+    hasMoreHistory.value = false
+    oldestServerId.value = null
   } finally {
     isLoading.value = false
   }
@@ -451,6 +470,44 @@ const loadMessages = async () => {
   await nextTick()
   enhanceCodeBlocks(messageContainer.value)
   await scrollToBottom()
+}
+
+// 加载更早的一页（滚动到顶部时触发），把旧消息 prepend 到列表顶部
+const loadOlderMessages = async () => {
+  if (!currentChatId.value || isLoadingOlder.value || !hasMoreHistory.value || !oldestServerId.value) return
+
+  isLoadingOlder.value = true
+  const container = messageContainer.value
+  const prevScrollHeight = container ? container.scrollHeight : 0
+  const prevScrollTop = container ? container.scrollTop : 0
+
+  try {
+    const res = await getHistory(currentChatId.value, {
+      limit: HISTORY_PAGE_SIZE,
+      beforeId: oldestServerId.value
+    })
+    const items = res.code === 200 && res.data ? res.data : []
+    if (items.length > 0) {
+      const older = items.map(toMessage).filter(Boolean)
+      messages.value = [...older, ...messages.value]
+      const ids = items.filter((i) => i && typeof i.id === 'number').map((i) => i.id)
+      oldestServerId.value = ids.length ? Math.min(...ids) : null
+      hasMoreHistory.value = ids.length === HISTORY_PAGE_SIZE
+      // 恢复滚动位置，让当前视图锚定在加载前的位置
+      await nextTick()
+      if (container) {
+        container.scrollTop = prevScrollTop + (container.scrollHeight - prevScrollHeight)
+      }
+      enhanceCodeBlocks(container)
+    } else {
+      hasMoreHistory.value = false
+      oldestServerId.value = null
+    }
+  } catch (e) {
+    console.error('加载更早消息失败', e)
+  } finally {
+    isLoadingOlder.value = false
+  }
 }
 
 const formatTime = (timestamp) => {
@@ -1128,6 +1185,19 @@ const handleLogout = async () => {
 @keyframes rotate {
   from { transform: rotate(0deg); }
   to { transform: rotate(360deg); }
+}
+
+.load-older-tip {
+  align-self: center;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: #909399;
+  padding: 8px 16px;
+  background: #fff;
+  border-radius: 20px;
+  border: 1px solid #ebeef5;
 }
 
 .empty-state {
