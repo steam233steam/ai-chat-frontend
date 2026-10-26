@@ -2,11 +2,18 @@ import api from './request'
 import router from '@/router'
 import { SSEParser } from '@/utils/sse'
 
+// 获取可用模型列表（公开接口）
+// 返回模型名数组，如 ["qwen2.5-coder:7b", "deepseek-chat"]
+export const getModels = async () => {
+  const res = await api.get('/chat/models')
+  return res.code === 200 ? (res.data || []) : []
+}
+
 // 发送消息（同步）
-export const sendMessage = (sessionId, question) => {
-  return api.post('/chat/ask', null, {
-    params: { sessionid: sessionId, question: question }
-  })
+export const sendMessage = (sessionId, question, modelName) => {
+  const params = { sessionid: sessionId, question }
+  if (modelName) params.modelName = modelName
+  return api.post('/chat/ask', null, { params })
 }
 
 // 发送消息（流式）
@@ -14,9 +21,13 @@ export const sendMessage = (sessionId, question) => {
 // onComplete()      —— 流正常结束
 // onError(err)      —— 出错（用户主动取消不会触发）
 // signal            —— AbortSignal，用于取消请求
-export const sendMessageStream = async (sessionId, question, onChunk, onComplete, onError, signal) => {
+// modelName         —— 可选，模型名（白名单内），不传用默认模型
+export const sendMessageStream = async (sessionId, question, onChunk, onComplete, onError, signal, modelName) => {
   const token = localStorage.getItem('token')
-  const url = `/api/chat/ask-stream?sessionid=${encodeURIComponent(sessionId)}&question=${encodeURIComponent(question)}`
+  let url = `/api/chat/ask-stream?sessionid=${encodeURIComponent(sessionId)}&question=${encodeURIComponent(question)}`
+  if (modelName) {
+    url += `&modelName=${encodeURIComponent(modelName)}`
+  }
 
   let response
   try {
@@ -111,11 +122,13 @@ export const getSessions = () => {
   return api.get('/chat/sessions')
 }
 
-// 获取历史消息
-export const getHistory = (sessionId) => {
-  return api.get('/chat/history', {
-    params: { sessionid: sessionId }
-  })
+// 获取历史消息（支持分页）
+// limit: 每页条数（1-100），不传返回全量；beforeId: 游标（该 ID 之前的一页），需配合 limit
+export const getHistory = (sessionId, options = {}) => {
+  const params = { sessionid: sessionId }
+  if (options.limit) params.limit = options.limit
+  if (options.beforeId) params.beforeId = options.beforeId
+  return api.get('/chat/history', { params })
 }
 
 // 更新会话标题

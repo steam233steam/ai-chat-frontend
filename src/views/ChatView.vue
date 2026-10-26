@@ -189,6 +189,24 @@
 
       <!-- 输入区域 -->
       <div class="chat-input">
+        <!-- 模型选择器（仅当可用模型 ≥2 时显示） -->
+        <div v-if="showModelSelector" class="model-selector">
+          <el-select
+            v-model="selectedModel"
+            :teleported="false"
+            placeholder="默认模型"
+            class="model-select"
+            size="small"
+          >
+            <el-option
+              v-for="m in modelOptions"
+              :key="m"
+              :label="m"
+              :value="m"
+            />
+          </el-select>
+          <span class="model-hint">模型</span>
+        </div>
         <div class="input-wrapper">
           <el-input
             v-model="inputMessage"
@@ -237,7 +255,7 @@ import {
   Plus, Menu, Edit, Delete, More, Check, Close, VideoPause, ArrowDown, SwitchButton, Download, Loading,
   Clock, Setting
 } from '@element-plus/icons-vue'
-import { sendMessageStream, getSessions, getHistory, updateTitle, clearSession } from '@/api/chat'
+import { sendMessageStream, getSessions, getHistory, updateTitle, clearSession, getModels } from '@/api/chat'
 import { getUserInfo, logout } from '@/api/user'
 import { renderMarkdown, enhanceCodeBlocks, exportChatAsJSON, exportChatAsText, copyText } from '@/utils/markdown'
 
@@ -262,6 +280,11 @@ const windowWidth = ref(window.innerWidth)
 const showScrollBottom = ref(false)
 const isNearBottom = ref(true)
 const userInfo = ref(null)
+
+// 模型选择
+const modelOptions = ref([])
+const selectedModel = ref('')
+const showModelSelector = computed(() => modelOptions.value.length >= 2)
 
 const quickQuestions = ref([
   '帮我写一段 Python 代码',
@@ -312,6 +335,7 @@ onMounted(async () => {
     console.error('加载用户信息失败', error)
   }
   
+  await loadModels()
   await loadChatId()
   await loadSessions()
   await loadMessages()
@@ -331,6 +355,15 @@ onUnmounted(() => {
   }
   abortActiveStream()
 })
+
+const loadModels = async () => {
+  try {
+    modelOptions.value = await getModels()
+  } catch (e) {
+    console.error('加载模型列表失败', e)
+    modelOptions.value = []
+  }
+}
 
 const loadChatId = async () => {
   const id = router.currentRoute.value.params.id
@@ -578,7 +611,8 @@ const handleSend = async () => {
         }
         messages.value = messages.value.filter(m => m !== aiMsg)
       },
-      abortController.value.signal
+      abortController.value.signal,
+      selectedModel.value || undefined
     )
   } catch (e) {
     console.error('发送消息失败', e)
@@ -1286,6 +1320,25 @@ const handleLogout = async () => {
   display: flex;
   gap: 12px;
   align-items: flex-end;
+  flex-wrap: wrap;
+}
+
+/* 模型选择器 */
+.model-selector {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.model-select {
+  width: 200px;
+}
+
+.model-hint {
+  font-size: 12px;
+  color: #909399;
+  flex-shrink: 0;
 }
 
 .input-wrapper {
@@ -1461,6 +1514,12 @@ const handleLogout = async () => {
   
   .chat-input {
     padding: 12px 16px;
+  }
+  
+  .model-selector {
+    order: -1;
+    width: 100%;
+    margin-bottom: 8px;
   }
   
   .user-info {
