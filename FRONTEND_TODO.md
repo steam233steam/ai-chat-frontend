@@ -5,7 +5,7 @@
 - [x] 删除冗余 Axios 实例（`api/index.js` 已移除，统一走 `api/request.js`）
 - [ ] 引入 Pinia 状态管理（user / chat / settings store，减轻 ChatView 单文件压力）
 - [ ] 设置页与后端打通（新增 `GET/PUT /user/settings`，模型与温度参数传给后端）
-- [ ] 长会话消息分页加载（后端 `/chat/history` 支持 `limit/offset`）
+- [x] 长会话消息分页加载（✅ 2026-10-26：`/chat/history` 支持 `limit/beforeId` 游标，滚动到顶部加载更早记录）
 
 ## P2 - 工程质量
 
@@ -18,10 +18,35 @@
 ## P3 - 体验优化
 
 - [x] 消息时间戳智能格式化（刚刚 / N 分钟前 / 昨天 / MM-DD）
+- [x] 模型选择（✅ 2026-10-26：`/chat/models` 拉取白名单，发送时可指定）
+- [x] 输入限制与顶部工具栏（✅ 2026-10-26：8000 字上限提示；历史/设置/导出/登出入口）
 - [ ] 会话标题搜索（侧边栏本地过滤）
 - [ ] 暗色模式（CSS 变量 + 设置页切换）
 - [ ] PWA 支持（vite-plugin-pwa，离线可用 + 安装到桌面）
 - [ ] 长消息列表性能（虚拟滚动或分页）
+
+## 变更记录（2026-10-26）
+
+**模型与分页**
+
+- `api/chat.js`：新增 `getModels()` 拉取可用模型白名单；`sendMessageStream` / `sendMessage` 支持可选 `modelName` 参数
+- 历史消息改为游标分页：`getHistory(sessionId, { limit, beforeId })`，首屏加载一页，滚动到顶部加载更早记录
+- 单条消息输入上限 8000 字，超出显示剩余字数提示
+- 会话标题编辑限制 50 字，接近上限显示剩余字数
+
+**顶部工具栏**
+
+- ChatView 顶部：历史记录入口、设置入口、导出下拉（JSON / 纯文本）、登出按钮
+- PC 端顶部显示用户头像与昵称（读取 `localStorage.loginUser`）
+
+**错误处理**
+
+- `api/request.js`：业务错误（400/500 等）不再全局弹窗，改为带 `business` 标记的 Error 抛给调用方；兼容无 `code` 字段的旧接口
+- 流式请求 401 自动清 token 并跳登录页
+
+**Markdown / 导出**
+
+- `utils/markdown.js`：`copyText` 统一复制逻辑，非 HTTPS 环境降级 `execCommand`；新增 `exportChatAsJSON` / `exportChatAsText` 导出工具
 
 ## 已完成的修复记录（2026-10-17）
 

@@ -5,6 +5,8 @@
 ## P1 - 功能
 
 - [x] 消息落 MySQL，Redis 只做缓存（✅ 2026-10-22 完成：MySQL 主存储 + Redis 7 天热缓存，读未命中自动回源；前端接口行为不变）
+- [ ] 前端已就绪待对接：`/chat/models` 模型白名单接口（前端 2026-10-26 已接入 `getModels()`，发消息时可选传 `modelName`）
+- [ ] 前端已就绪待对接：`/chat/history` 游标分页（`limit` + `beforeId`，前端 2026-10-26 已按分页实现）
 - [ ] `/chat/ask-stream` 改为 POST（语义修正）
 - [ ] `Authorization` 加 `Bearer` 前缀（前后端同步修改）
 - [ ] 删除 / 清空会话接口分离
