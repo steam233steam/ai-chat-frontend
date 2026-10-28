@@ -4,6 +4,17 @@
     <meta charset="UTF-8">
 
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <script>
+      // 在 CSS 加载前应用已保存主题，避免深色模式用户看到白屏闪烁
+      try {
+        var savedTheme = localStorage.getItem('ai-chat-theme')
+        if (savedTheme === 'dark' || savedTheme === 'light') {
+          document.documentElement.setAttribute('data-theme', savedTheme)
+        }
+      } catch (e) {
+        // localStorage 不可用时保持默认浅色
+      }
+    </script>
     <title>AI 聊天助手</title>
   </head>
   <body>

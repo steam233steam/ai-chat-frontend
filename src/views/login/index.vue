@@ -3,6 +3,10 @@
     <div class="login-blob login-blob-1"></div>
     <div class="login-blob login-blob-2"></div>
 
+    <el-button class="login-theme-btn" circle :title="isDark ? '切换为浅色' : '切换为深色'" @click="toggle">
+      <el-icon><Sunny v-if="isDark" /><Moon v-else /></el-icon>
+    </el-button>
+
     <div class="login-box login-box-enter">
       <div class="login-logo">
         <el-icon :size="28" color="var(--color-primary)"><ChatDotRound /></el-icon>
@@ -225,8 +229,9 @@
 <script setup>
 import { ref, reactive, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
+import { useTheme } from '@/composables/useTheme'
 import { ElMessage } from 'element-plus'
-import { InfoFilled, Iphone, Message, Lock, ChatDotRound } from '@element-plus/icons-vue'
+import { InfoFilled, Iphone, Message, Lock, ChatDotRound, Sunny, Moon } from '@element-plus/icons-vue'
 import {
   sendVerificationCode,
   loginWithCode,
@@ -236,6 +241,7 @@ import {
 } from '@/api/user'
 
 const router = useRouter()
+const { isDark, toggle } = useTheme()
 const loading = ref(false)
 const currentStep = ref(1)
 const countdown = ref(0)
@@ -520,6 +526,29 @@ onUnmounted(() => {
   bottom: -160px;
   right: -100px;
   background: radial-gradient(circle, rgba(139, 92, 246, 0.38), transparent 60%);
+}
+
+.login-theme-btn {
+  position: absolute;
+  top: 24px;
+  right: 24px;
+  z-index: 2;
+  width: 40px;
+  height: 40px;
+  border: 1px solid var(--glass-border);
+  background: var(--glass-bg);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+  color: var(--text-secondary);
+  box-shadow: var(--shadow-sm);
+  transition: all 0.2s ease;
+}
+
+.login-theme-btn:hover {
+  color: var(--color-primary);
+  border-color: var(--color-primary-soft);
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-glow);
 }
 
 .login-box {

@@ -4,7 +4,7 @@
     <div class="decor-blob decor-2"></div>
     <!-- 侧边栏遮罩（移动端） -->
     <div v-if="isMobile && sidebarVisible" class="sidebar-mask" @click="closeSidebar"></div>
-    
+
     <!-- 侧边栏 -->
     <aside class="sidebar" :class="{ show: sidebarVisible }">
       <div class="sidebar-header">
@@ -16,17 +16,30 @@
           <el-icon><Plus /></el-icon>
           新对话
         </el-button>
+        <el-input
+          v-model="sessionQuery"
+          placeholder="搜索对话..."
+          :prefix-icon="Search"
+          clearable
+          class="session-search"
+        />
       </div>
-      
+
+      <div class="sidebar-section-title">
+        <span>最近对话</span>
+        <span class="session-count">{{ filteredSessions.length }}</span>
+      </div>
       <div class="chat-list">
-        <div 
-          v-if="chatSessions.length === 0"
+        <div
+          v-if="filteredSessions.length === 0"
           class="empty-sessions"
         >
-          <p>暂无对话记录</p>
+          <el-icon :size="30"><Search v-if="sessionQuery" /><ChatLineSquare v-else /></el-icon>
+          <p>{{ sessionQuery ? '没有匹配的对话' : '暂无对话记录' }}</p>
+          <span>{{ sessionQuery ? '换个关键词试试' : '点击上方“新对话”开始' }}</span>
         </div>
-        <div 
-          v-for="session in chatSessions" 
+        <div
+          v-for="session in filteredSessions"
           :key="session.sessionId"
           :class="['chat-item', { active: currentChatId === session.sessionId }]"
           @click="selectChat(session.sessionId)"
@@ -37,11 +50,11 @@
             <span class="chat-title" v-if="editingSessionId !== session.sessionId">{{ session.title }}</span>
             <span v-if="session.model" class="session-model-tag" :title="'锁定模型：' + session.model">{{ session.model }}</span>
           </div>
-          
+
           <!-- 编辑输入框 -->
           <div v-if="editingSessionId === session.sessionId" class="edit-box" @click.stop>
-            <input 
-              v-model="editingTitle" 
+            <input
+              v-model="editingTitle"
               class="edit-input"
               maxlength="50"
               @keyup.enter="saveTitle(session.sessionId)"
@@ -55,12 +68,12 @@
               <el-icon><Close /></el-icon>
             </button>
           </div>
-          
+
           <!-- 三个点按钮（鼠标悬停时显示） -->
           <button class="more-btn" @click.stop="showContextMenu($event, session)">
             <el-icon><More /></el-icon>
           </button>
-          
+
           <!-- 右键菜单 -->
           <div v-if="menuSession?.sessionId === session.sessionId" class="context-menu" @click.stop>
             <div class="context-menu-item" @click="startEditing(session.sessionId, session.title)">
@@ -74,6 +87,22 @@
           </div>
         </div>
       </div>
+
+      <div class="sidebar-footer">
+        <div class="sidebar-user-card">
+          <el-avatar :size="34" class="sidebar-avatar">{{ userInfo?.name?.charAt(0) || 'U' }}</el-avatar>
+          <div class="sidebar-user-meta">
+            <span class="sidebar-user-name">{{ userInfo?.name || '未登录' }}</span>
+            <span class="sidebar-user-status"><i></i> 多模型在线</span>
+          </div>
+          <el-button text circle class="sidebar-icon-btn" title="设置" @click="router.push('/settings')">
+            <el-icon><Setting /></el-icon>
+          </el-button>
+          <el-button text circle class="sidebar-icon-btn" title="登出" @click="handleLogout">
+            <el-icon><SwitchButton /></el-icon>
+          </el-button>
+        </div>
+      </div>
     </aside>
 
     <!-- 主内容区 -->
@@ -83,35 +112,34 @@
         <el-button class="menu-btn" @click="toggleSidebar" circle>
           <el-icon><Menu /></el-icon>
         </el-button>
-        <div class="header-title">
-          {{ currentSession?.title || '新对话' }}
+        <div class="header-title-wrap">
+          <div class="header-title">
+            {{ currentSession?.title || '新对话' }}
+          </div>
+          <span v-if="currentSession?.model" class="header-model-tag" :title="'锁定模型：' + currentSession.model">
+            {{ currentSession.model }}
+          </span>
         </div>
         <div class="header-actions">
-          <!-- 用户信息（PC端显示） -->
-          <div v-if="!isMobile && userInfo" class="user-info">
-            <el-avatar :size="32">{{ userInfo.name?.charAt(0) || 'U' }}</el-avatar>
-            <span class="user-name">{{ userInfo.name }}</span>
-          </div>
           <!-- 删除当前对话按钮（仅移动端显示） -->
-          <el-button v-if="isMobile" size="small" circle class="mobile-delete-btn" @click="deleteChat(currentChatId)" title="删除当前对话">
+          <el-button v-if="isMobile" size="small" circle class="header-action mobile-delete-btn" @click="deleteChat(currentChatId)" title="删除当前对话">
             <el-icon><Delete /></el-icon>
           </el-button>
           <!-- 主题切换 -->
-          <el-button size="small" :title="isDark ? '切换为浅色' : '切换为深色'" @click="toggle">
+          <el-button size="small" circle class="header-action" :title="isDark ? '切换为浅色' : '切换为深色'" @click="toggle">
             <el-icon><Sunny v-if="isDark" /><Moon v-else /></el-icon>
           </el-button>
           <!-- 历史 / 设置入口 -->
-          <el-button size="small" title="历史记录" @click="router.push('/history')">
+          <el-button size="small" circle class="header-action desktop-action" title="历史记录" @click="router.push('/history')">
             <el-icon><Clock /></el-icon>
           </el-button>
-          <el-button size="small" title="设置" @click="router.push('/settings')">
+          <el-button size="small" circle class="header-action desktop-action" title="设置" @click="router.push('/settings')">
             <el-icon><Setting /></el-icon>
           </el-button>
           <!-- 导出按钮 -->
-          <el-dropdown @command="(format) => exportChat(format)">
-            <el-button size="small" title="导出对话">
+          <el-dropdown class="desktop-action" @command="(format) => exportChat(format)">
+            <el-button size="small" circle class="header-action" title="导出对话">
               <el-icon><Download /></el-icon>
-              <el-icon><ArrowDown /></el-icon>
             </el-button>
             <template #dropdown>
               <el-dropdown-menu>
@@ -121,9 +149,24 @@
             </template>
           </el-dropdown>
           <!-- 登出按钮 -->
-          <el-button size="small" @click="handleLogout" title="登出">
+          <el-button size="small" circle class="header-action desktop-action" @click="handleLogout" title="登出">
             <el-icon><SwitchButton /></el-icon>
           </el-button>
+          <!-- 移动端更多菜单 -->
+          <el-dropdown class="mobile-action" @command="handleMobileCommand">
+            <el-button size="small" circle class="header-action" title="更多">
+              <el-icon><MoreFilled /></el-icon>
+            </el-button>
+            <template #dropdown>
+              <el-dropdown-menu>
+                <el-dropdown-item command="history">历史记录</el-dropdown-item>
+                <el-dropdown-item command="settings">设置</el-dropdown-item>
+                <el-dropdown-item command="export-json">导出 JSON</el-dropdown-item>
+                <el-dropdown-item command="export-text">导出文本</el-dropdown-item>
+                <el-dropdown-item command="logout" divided>退出登录</el-dropdown-item>
+              </el-dropdown-menu>
+            </template>
+          </el-dropdown>
         </div>
       </header>
 
@@ -134,25 +177,30 @@
           <el-icon class="loading-icon" :size="40"><Loading /></el-icon>
           <p>正在加载对话...</p>
         </div>
-        
+
         <!-- 空状态 -->
         <div v-else-if="messages.length === 0" class="empty-state">
-          <div class="empty-icon">
-            <el-icon :size="80" color="var(--color-primary)"><ChatDotRound /></el-icon>
+          <div class="empty-icon-wrap">
+            <div class="empty-icon-glow"></div>
+            <div class="empty-icon">
+              <el-icon :size="64"><ChatDotRound /></el-icon>
+            </div>
           </div>
+          <span class="empty-eyebrow">AI CHAT · MULTI-MODEL</span>
           <h2>你好，有什么可以帮你的？</h2>
-          <p>我可以帮你回答问题、写代码、翻译文本等</p>
-          
+          <p>支持 Markdown、代码高亮与多模型切换</p>
+
           <!-- 快捷问题 -->
           <div class="quick-questions">
-            <div 
-              v-for="(q, index) in quickQuestions" 
+            <div
+              v-for="(q, index) in quickQuestions"
               :key="index"
               class="quick-question"
               @click="sendQuickQuestion(q)"
             >
               <el-icon><Document /></el-icon>
               <span>{{ q }}</span>
+              <el-icon class="quick-arrow"><ArrowRight /></el-icon>
             </div>
           </div>
         </div>
@@ -180,7 +228,9 @@
               <div class="message-content">
                 <div class="message-header">
                   <span class="sender-name">{{ msg.role === 'user' ? '你' : 'AI 助手' }}</span>
-                  <span v-if="msg.timestamp" class="message-time">{{ formatTime(msg.timestamp) }}</span>
+                  <span v-if="msg.role === 'ai' && msg.model" class="message-model">{{ msg.model }}</span>
+                  <span v-if="msg.streaming" class="message-streaming"><i></i>正在生成</span>
+                  <span v-else-if="msg.timestamp" class="message-time">{{ formatTime(msg.timestamp) }}</span>
                 </div>
                 <div class="message-bubble">
                   <StreamingMarkdown
@@ -190,7 +240,7 @@
                   />
                   <p v-else class="plain-text">{{ msg.content }}</p>
                 </div>
-                <div class="message-actions" v-if="msg.role === 'ai' && !msg.streaming">
+                <div class="message-actions" v-if="!msg.streaming">
                   <el-button text size="small" @click="copyMessage(msg.content)">
                     <el-icon><CopyDocument /></el-icon>
                     复制
@@ -211,59 +261,75 @@
 
       <!-- 输入区域 -->
       <div class="chat-input">
-        <!-- 模型选择器（仅当可用模型 ≥2 时显示） -->
-        <div v-if="showModelSelector" class="model-selector">
-          <el-select
-            v-model="selectedModel"
-            :teleported="false"
-            :placeholder="modelLocked ? '已锁定' : '默认模型'"
-            :disabled="modelLocked"
-            class="model-select"
-            size="small"
-          >
-            <el-option
-              v-for="m in modelOptions"
-              :key="m"
-              :label="m"
-              :value="m"
+        <div class="composer" :class="{ focused: inputFocused }">
+          <div class="composer-toolbar">
+            <!-- 模型选择器（仅当可用模型 ≥2 时显示） -->
+            <div v-if="showModelSelector" class="model-selector">
+              <el-icon class="model-icon"><MagicStick /></el-icon>
+              <el-select
+                v-model="selectedModel"
+                :teleported="false"
+                :placeholder="modelLocked ? '已锁定' : '默认模型'"
+                :disabled="modelLocked"
+                class="model-select"
+                size="small"
+              >
+                <el-option
+                  v-for="m in modelOptions"
+                  :key="m"
+                  :label="m"
+                  :value="m"
+                />
+              </el-select>
+              <span v-if="modelLocked" class="model-hint locked">
+                <el-icon><Lock /></el-icon>
+                会话已锁定
+              </span>
+            </div>
+            <div class="composer-meta">
+              <span class="composer-shortcut">Enter 发送 · Shift + Enter 换行</span>
+              <span class="composer-count" :class="{ over: inputMessage.length > 8000 }">
+                {{ inputMessage.length }} / 8000
+              </span>
+            </div>
+          </div>
+          <div class="composer-body">
+            <el-input
+              v-model="inputMessage"
+              type="textarea"
+              :rows="3"
+              placeholder="输入消息，开始新的对话..."
+              :autosize="{ minRows: 3, maxRows: 8 }"
+              @keydown.enter="onEnterKey"
+              @focus="inputFocused = true"
+              @blur="inputFocused = false"
+              class="message-input"
+              autocomplete="off"
             />
-          </el-select>
-          <span class="model-hint" :class="{ locked: modelLocked }">{{ modelLocked ? '会话已锁定，换模型请新建会话' : '模型' }}</span>
-        </div>
-        <div class="input-wrapper">
-          <el-input
-            v-model="inputMessage"
-            type="textarea"
-            :rows="3"
-            placeholder="输入消息... (Shift+Enter 换行，Enter 发送)"
-            :autosize="{ minRows: 3, maxRows: 8 }"
-            @keydown.enter="onEnterKey"
-            class="message-input"
-            autocomplete="off"
-          />
+            <el-button
+              v-if="!isTyping"
+              type="primary"
+              class="send-btn"
+              :disabled="!inputMessage.trim() || inputMessage.length > 8000"
+              @click="handleSend"
+            >
+              <el-icon><Promotion /></el-icon>
+              <span class="btn-label">发送</span>
+            </el-button>
+            <el-button
+              v-else
+              type="danger"
+              class="stop-btn"
+              @click="stopGeneration"
+            >
+              <el-icon><VideoPause /></el-icon>
+              <span class="btn-label">停止</span>
+            </el-button>
+          </div>
           <div v-if="inputMessage.length > 8000" class="input-limit-tip">
             消息不能超过 8000 个字符（当前 {{ inputMessage.length }}）
           </div>
         </div>
-        <el-button
-          v-if="!isTyping"
-          type="primary"
-          class="send-btn"
-          :disabled="!inputMessage.trim() || inputMessage.length > 8000"
-          @click="handleSend"
-        >
-          <el-icon><Promotion /></el-icon>
-          发送
-        </el-button>
-        <el-button
-          v-else
-          type="danger"
-          class="stop-btn"
-          @click="stopGeneration"
-        >
-          <el-icon><VideoPause /></el-icon>
-          停止
-        </el-button>
       </div>
     </main>
   </div>
@@ -276,11 +342,11 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   ChatDotRound, Document, CopyDocument, Promotion,
   Plus, Menu, Edit, Delete, More, Check, Close, VideoPause, ArrowDown, SwitchButton, Download, Loading,
-  Clock, Setting
+  Clock, Setting, ChatLineSquare, MagicStick, Lock, MoreFilled, ArrowRight, Search
 } from '@element-plus/icons-vue'
 import { sendMessageStream, getSessions, getHistory, updateTitle, clearSession, getModels } from '@/api/chat'
 import { getUserInfo, logout } from '@/api/user'
-import { renderMarkdown, enhanceCodeBlocks, exportChatAsJSON, exportChatAsText, copyText } from '@/utils/markdown'
+import { enhanceCodeBlocks, exportChatAsJSON, exportChatAsText, copyText } from '@/utils/markdown'
 import StreamingMarkdown from '@/components/StreamingMarkdown.vue'
 import { useTheme } from '@/composables/useTheme'
 import { AnimatePresence, motion } from 'motion-v'
@@ -288,12 +354,14 @@ import { Moon, Sunny } from '@element-plus/icons-vue'
 
 const router = useRouter()
 const inputMessage = ref('')
+const inputFocused = ref(false)
 const { isDark, toggle } = useTheme()
 const messages = ref([])
 const isTyping = ref(false)
 const messageContainer = ref(null)
 const currentChatId = ref(null)
 const chatSessions = ref([])
+const sessionQuery = ref('')
 const sidebarVisible = ref(false)
 const isLoading = ref(false)
 const editingSessionId = ref(null)
@@ -326,6 +394,14 @@ const quickQuestions = ref([
 
 const currentSession = computed(() => {
   return chatSessions.value.find(s => s.sessionId === currentChatId.value)
+})
+
+const filteredSessions = computed(() => {
+  const keyword = sessionQuery.value.trim().toLowerCase()
+  if (!keyword) return chatSessions.value
+  return chatSessions.value.filter((session) =>
+    (session.title || '').toLowerCase().includes(keyword)
+  )
 })
 
 const isMobile = computed(() => windowWidth.value <= 768)
@@ -382,7 +458,7 @@ onMounted(async () => {
   } catch (error) {
     console.error('加载用户信息失败', error)
   }
-  
+
   await loadModels()
   await loadChatId()
   await loadSessions()
@@ -445,9 +521,21 @@ watch(
     activeAiMsg = null
     currentChatId.value = id
     messages.value = []
+    syncSessionModel(id)
     await loadMessages()
   }
 )
+
+// 流式结束时前端只知道用户选择的模型；默认模型由后端解析，刷新会话后补到最新 AI 气泡
+const syncLastAiModel = () => {
+  if (!currentSessionModel.value) return
+  for (let i = messages.value.length - 1; i >= 0; i--) {
+    if (messages.value[i].role === 'ai') {
+      if (!messages.value[i].model) messages.value[i].model = currentSessionModel.value
+      break
+    }
+  }
+}
 
 const loadSessions = async () => {
   try {
@@ -455,7 +543,10 @@ const loadSessions = async () => {
     if (res.code === 200) {
       chatSessions.value = res.data || []
       // 会话列表刷新后，同步当前会话锁定的模型（可能新会话刚锁定模型）
-      if (currentChatId.value) syncSessionModel(currentChatId.value)
+      if (currentChatId.value) {
+        syncSessionModel(currentChatId.value)
+        syncLastAiModel()
+      }
     }
   } catch (e) {
     console.error('加载会话列表失败', e)
@@ -474,8 +565,8 @@ const toMessage = (item) => {
   const msg = {
     role: isAi ? 'ai' : 'user',
     content,
-    // 历史消息只渲染一次 Markdown，避免流式输出时反复解析整个列表
-    html: isAi ? renderMarkdown(content) : '',
+    // 历史消息没带 model 时用会话锁定模型兜底（旧数据 / 精简接口）
+    model: isAi ? (normalized.model || currentSessionModel.value || null) : null,
     streaming: false,
     timestamp: normalized.timestamp ? new Date(normalized.timestamp) : new Date()
   }
@@ -486,26 +577,43 @@ const toMessage = (item) => {
 
 // 加载最新一页历史（用于切换会话 / 首次进入）
 const loadMessages = async () => {
-  if (!currentChatId.value) return
+  const sessionId = currentChatId.value
+  if (!sessionId) return
 
   isLoading.value = true
+  // 切换会话后先清掉上一页的分页游标，避免旧游标参与新会话的加载
+  hasMoreHistory.value = false
+  oldestServerId.value = null
+
   try {
-    const res = await getHistory(currentChatId.value, { limit: HISTORY_PAGE_SIZE })
+    const res = await getHistory(sessionId, { limit: HISTORY_PAGE_SIZE })
+    // 请求期间用户可能已切到别的会话，旧响应直接丢弃
+    if (sessionId !== currentChatId.value) return
     const items = res.code === 200 && res.data ? res.data : []
     messages.value = items.map(toMessage).filter(Boolean)
     msgIdCounter = messages.value.length
+    // 会话列表偶尔拿不到 model（旧缓存/跨标签页）时，用历史里最近一条消息的模型兜底
+    const historyModel = [...items].reverse().find(i => i && i.model)?.model
+    if (historyModel && !currentSessionModel.value) {
+      currentSessionModel.value = historyModel
+      selectedModel.value = historyModel
+    }
+    syncLastAiModel()
     const ids = items.filter((i) => i && typeof i.id === 'number').map((i) => i.id)
     // 正好一页 => 可能还有更早的数据；不足一页 => 没有更多
     hasMoreHistory.value = ids.length === HISTORY_PAGE_SIZE
     oldestServerId.value = ids.length ? Math.min(...ids) : null
   } catch (e) {
+    if (sessionId !== currentChatId.value) return
     console.error('加载消息失败', e)
     messages.value = []
     hasMoreHistory.value = false
     oldestServerId.value = null
   } finally {
-    isLoading.value = false
+    if (sessionId === currentChatId.value) isLoading.value = false
   }
+
+  if (sessionId !== currentChatId.value) return
 
   // 等列表真正渲染出来后再挂载代码块复制按钮并滚到底部
   await nextTick()
@@ -515,18 +623,22 @@ const loadMessages = async () => {
 
 // 加载更早的一页（滚动到顶部时触发），把旧消息 prepend 到列表顶部
 const loadOlderMessages = async () => {
-  if (!currentChatId.value || isLoadingOlder.value || !hasMoreHistory.value || !oldestServerId.value) return
+  const sessionId = currentChatId.value
+  if (!sessionId || isLoading.value || isLoadingOlder.value || !hasMoreHistory.value || !oldestServerId.value) return
 
   isLoadingOlder.value = true
+  const beforeId = oldestServerId.value
   const container = messageContainer.value
   const prevScrollHeight = container ? container.scrollHeight : 0
   const prevScrollTop = container ? container.scrollTop : 0
 
   try {
-    const res = await getHistory(currentChatId.value, {
+    const res = await getHistory(sessionId, {
       limit: HISTORY_PAGE_SIZE,
-      beforeId: oldestServerId.value
+      beforeId
     })
+    // 请求期间切换了会话：不要把旧会话的历史插到新会话里
+    if (sessionId !== currentChatId.value) return
     const items = res.code === 200 && res.data ? res.data : []
     if (items.length > 0) {
       const older = items.map(toMessage).filter(Boolean)
@@ -545,7 +657,9 @@ const loadOlderMessages = async () => {
       oldestServerId.value = null
     }
   } catch (e) {
-    console.error('加载更早消息失败', e)
+    if (sessionId === currentChatId.value) {
+      console.error('加载更早消息失败', e)
+    }
   } finally {
     isLoadingOlder.value = false
   }
@@ -560,15 +674,15 @@ const formatTime = (timestamp) => {
   const diffMins = Math.floor(diffMs / 60000)
   const diffHours = Math.floor(diffMs / 3600000)
   const diffDays = Math.floor(diffMs / 86400000)
-  
+
   if (diffMins < 1) return '刚刚'
   if (diffMins < 60) return `${diffMins} 分钟前`
   if (diffHours < 24) return `${diffHours} 小时前`
   if (diffDays < 7) return `${diffDays} 天前`
-  
+
   // 超过7天显示具体日期
-  return date.toLocaleDateString('zh-CN', { 
-    month: '2-digit', 
+  return date.toLocaleDateString('zh-CN', {
+    month: '2-digit',
     day: '2-digit',
     hour: '2-digit',
     minute: '2-digit'
@@ -607,7 +721,6 @@ const finalizeStreamingMessage = () => {
   activeAiMsg = null
   if (!msg || !msg.streaming) return
   msg.streaming = false
-  msg.html = renderMarkdown(msg.content)
   nextTick(() => enhanceCodeBlocks(messageContainer.value))
 }
 
@@ -616,6 +729,41 @@ const stopGeneration = () => {
   finalizeStreamingMessage()
   // 后端在取消时也会保存已生成的部分，重新拉一次列表同步标题
   loadSessions()
+}
+
+const resetStreamingState = () => {
+  activeAiMsg = null
+  isTyping.value = false
+  abortController.value = null
+  if (streamRAF) {
+    cancelAnimationFrame(streamRAF)
+    streamRAF = null
+  }
+}
+
+const handleStreamError = (error, aiMsg, userMsgObj, originalText) => {
+  console.error('流式发送失败', error)
+  resetStreamingState()
+
+  if (error?.code === 409) {
+    // 会话锁冲突在落库前抛出，用户消息并未保存：回滚两个气泡并把内容放回输入框
+    // 注意：响应式数组里取到的是 Proxy，不能用原始对象引用比较，按 id 过滤
+    const rejectedIds = new Set([aiMsg.id, userMsgObj.id])
+    messages.value = messages.value.filter(m => !rejectedIds.has(m.id))
+    if (!inputMessage.value.trim()) inputMessage.value = originalText
+    // 本地会话列表可能已过期（例如另一个标签页锁定了模型），刷新后再同步锁定态
+    loadSessions()
+    ElMessage.warning(error.message || '该会话已锁定模型，要切换请新建会话')
+    return
+  }
+
+  // 其他错误（网络中断 / AI 500）后端可能已保存用户消息，保留用户气泡便于继续
+  messages.value = messages.value.filter(m => m.id !== aiMsg.id)
+  if (error?.message) {
+    ElMessage.error(error.message)
+  } else {
+    ElMessage.error('发送失败，请稍后重试')
+  }
 }
 
 const handleSend = async () => {
@@ -628,13 +776,13 @@ const handleSend = async () => {
   }
 
   const userMsg = trimmedInput
-
-  messages.value.push({
+  const userMsgObj = {
     id: `local_${Date.now()}_${++msgIdCounter}`,
     role: 'user',
     content: userMsg,
     timestamp: new Date()
-  })
+  }
+  messages.value.push(userMsgObj)
 
   inputMessage.value = ''
   isTyping.value = true
@@ -645,7 +793,7 @@ const handleSend = async () => {
     id: `local_${Date.now()}_${++msgIdCounter}`,
     role: 'ai',
     content: '',
-    html: '',
+    model: selectedModel.value || currentSessionModel.value || null,
     streaming: true,
     timestamp: new Date()
   })
@@ -676,62 +824,22 @@ const handleSend = async () => {
       },
       () => {
         aiMsg.streaming = false
-        aiMsg.html = renderMarkdown(aiMsg.content)
-        activeAiMsg = null
-        isTyping.value = false
-        abortController.value = null
-        if (streamRAF) {
-          cancelAnimationFrame(streamRAF)
-          streamRAF = null
-        }
+        resetStreamingState()
         if (!hasReceivedData) {
           // 一个片段都没收到时不要留空白气泡
-          messages.value = messages.value.filter(m => m !== aiMsg)
+          messages.value = messages.value.filter(m => m.id !== aiMsg.id)
           ElMessage.warning('未收到 AI 回复，请稍后重试')
           return
         }
         nextTick(() => enhanceCodeBlocks(messageContainer.value))
         loadSessions()
       },
-      (error) => {
-        console.error('流式发送失败', error)
-        activeAiMsg = null
-        isTyping.value = false
-        abortController.value = null
-        if (streamRAF) {
-          cancelAnimationFrame(streamRAF)
-          streamRAF = null
-        }
-        if (error?.code === 409) {
-          // 会话锁模型冲突：同步锁定模型并引导新建会话
-          syncSessionModel(currentChatId.value)
-          ElMessage.warning(error.message || '该会话已锁定模型，要切换请新建会话')
-        } else if (error?.message) {
-          ElMessage.error(error.message)
-        } else {
-          ElMessage.error('发送失败，请稍后重试')
-        }
-        messages.value = messages.value.filter(m => m !== aiMsg)
-      },
+      (error) => handleStreamError(error, aiMsg, userMsgObj, userMsg),
       abortController.value.signal,
       selectedModel.value || undefined
     )
   } catch (e) {
-    console.error('发送消息失败', e)
-    activeAiMsg = null
-    isTyping.value = false
-    abortController.value = null
-    if (streamRAF) {
-      cancelAnimationFrame(streamRAF)
-      streamRAF = null
-    }
-    if (e?.code === 409) {
-      syncSessionModel(currentChatId.value)
-      ElMessage.warning(e.message || '该会话已锁定模型，要切换请新建会话')
-    } else {
-      ElMessage.error(e?.message || '发送失败，请稍后重试')
-    }
-    messages.value = messages.value.filter(m => m !== aiMsg)
+    handleStreamError(e, aiMsg, userMsgObj, userMsg)
   }
 }
 
@@ -754,7 +862,7 @@ const exportChat = async (format = 'json') => {
   try {
     let content = ''
     let filename = `对话_${new Date().toLocaleDateString('zh-CN').replace(/\//g, '-')}`
-    
+
     if (format === 'json') {
       content = exportChatAsJSON(messages.value)
       filename += '.json'
@@ -762,7 +870,7 @@ const exportChat = async (format = 'json') => {
       content = exportChatAsText(messages.value)
       filename += '.txt'
     }
-    
+
     // 创建下载链接
     const blob = new Blob([content], { type: 'text/plain;charset=utf-8' })
     const url = URL.createObjectURL(blob)
@@ -773,7 +881,7 @@ const exportChat = async (format = 'json') => {
     a.click()
     document.body.removeChild(a)
     URL.revokeObjectURL(url)
-    
+
     ElMessage.success('导出成功')
   } catch (error) {
     console.error('导出失败', error)
@@ -784,6 +892,7 @@ const exportChat = async (format = 'json') => {
 const newChat = async () => {
   abortActiveStream()
   activeAiMsg = null
+  sessionQuery.value = ''
   const newId = generateSessionId()
   currentChatId.value = newId
   messages.value = []
@@ -796,10 +905,12 @@ const newChat = async () => {
 
 const selectChat = async (id) => {
   menuSession.value = null
+  sidebarVisible.value = false
+  if (id === currentChatId.value) return
+
   abortActiveStream()
   activeAiMsg = null
   currentChatId.value = id
-  sidebarVisible.value = false
   router.push(`/chat/${id}`)
   syncSessionModel(id)
   await loadMessages()
@@ -886,9 +997,11 @@ const deleteChat = async (sessionId) => {
     return // 用户取消
   }
 
-  // 删除正在生成的会话时先中断流，避免回复写回已删除的会话
-  abortActiveStream()
-  activeAiMsg = null
+  // 只有删除正在生成的会话才需要中断流，删除其他会话不应打断当前回复
+  if (currentChatId.value === sessionId) {
+    abortActiveStream()
+    activeAiMsg = null
+  }
 
   const exists = chatSessions.value.some(s => s.sessionId === sessionId)
   try {
@@ -905,6 +1018,7 @@ const deleteChat = async (sessionId) => {
   if (currentChatId.value === sessionId) {
     if (chatSessions.value.length > 0) {
       currentChatId.value = chatSessions.value[0].sessionId
+      syncSessionModel(currentChatId.value)
       router.push(`/chat/${currentChatId.value}`)
       await loadMessages()
     } else {
@@ -915,6 +1029,26 @@ const deleteChat = async (sessionId) => {
   ElMessage.success('会话已删除')
 }
 
+const handleMobileCommand = (command) => {
+  switch (command) {
+    case 'history':
+      router.push('/history')
+      break
+    case 'settings':
+      router.push('/settings')
+      break
+    case 'export-json':
+      exportChat('json')
+      break
+    case 'export-text':
+      exportChat('text')
+      break
+    case 'logout':
+      handleLogout()
+      break
+  }
+}
+
 // 登出功能
 const handleLogout = async () => {
   try {
@@ -923,7 +1057,7 @@ const handleLogout = async () => {
       cancelButtonText: '取消',
       type: 'warning'
     })
-    
+
     await logout()
     localStorage.removeItem('token')
     localStorage.removeItem('loginUser')
@@ -1026,17 +1160,94 @@ const handleLogout = async () => {
   box-shadow: 0 6px 20px rgba(99, 102, 241, 0.45);
 }
 
+.sidebar-section-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 18px 6px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 1.4px;
+  color: var(--text-sidebar-soft);
+  text-transform: uppercase;
+}
+
+.session-count {
+  min-width: 20px;
+  padding: 1px 7px;
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text-sidebar-soft);
+  font-size: 10px;
+  text-align: center;
+  letter-spacing: 0;
+}
+
+.session-search {
+  margin-top: 12px;
+}
+
+.session-search :deep(.el-input__wrapper) {
+  padding: 2px 10px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.07);
+  box-shadow: none !important;
+  transition: all 0.2s ease;
+}
+
+.session-search :deep(.el-input__wrapper:hover),
+.session-search :deep(.el-input__wrapper.is-focus) {
+  border-color: rgba(129, 140, 248, 0.55);
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.session-search :deep(.el-input__inner) {
+  height: 30px;
+  color: var(--text-sidebar);
+  font-size: 12px;
+}
+
+.session-search :deep(.el-input__inner)::placeholder {
+  color: var(--text-sidebar-soft);
+}
+
+.session-search :deep(.el-input__prefix),
+.session-search :deep(.el-input__suffix) {
+  color: var(--text-sidebar-soft);
+}
+
 .chat-list {
   flex: 1;
   overflow-y: auto;
-  padding: 10px 10px 16px;
+  padding: 4px 10px 16px;
 }
 
 .empty-sessions {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
   text-align: center;
-  padding: 48px 16px;
+  padding: 44px 16px;
   color: var(--text-sidebar-soft);
   font-size: 13px;
+}
+
+.empty-sessions .el-icon {
+  color: rgba(129, 140, 248, 0.75);
+  margin-bottom: 4px;
+}
+
+.empty-sessions p {
+  margin: 0;
+  color: var(--text-sidebar);
+  font-weight: 500;
+}
+
+.empty-sessions span {
+  font-size: 11px;
+  opacity: 0.7;
 }
 
 .chat-item {
@@ -1060,6 +1271,87 @@ const handleLogout = async () => {
   background: rgba(99, 102, 241, 0.22);
   border-color: rgba(129, 140, 248, 0.4);
   box-shadow: inset 0 0 0 1px rgba(129, 140, 248, 0.15);
+}
+
+.sidebar-footer {
+  padding: 12px;
+  border-top: 1px solid var(--border-sidebar);
+  background: rgba(0, 0, 0, 0.14);
+}
+
+.sidebar-user-card {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 9px 10px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.sidebar-avatar {
+  flex-shrink: 0;
+  color: #fff;
+  font-size: 14px;
+  background: linear-gradient(135deg, var(--color-primary) 0%, #8b5cf6 100%);
+  box-shadow: 0 4px 12px rgba(99, 102, 241, 0.35);
+}
+
+.sidebar-user-meta {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.sidebar-user-name {
+  color: var(--text-sidebar);
+  font-size: 13px;
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sidebar-user-status {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--text-sidebar-soft);
+  font-size: 10px;
+}
+
+.sidebar-user-status i {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--color-success);
+  box-shadow: 0 0 8px var(--color-success);
+}
+
+.sidebar-icon-btn {
+  width: 28px;
+  height: 28px;
+  flex-shrink: 0;
+  color: var(--text-sidebar-soft);
+}
+
+.sidebar-icon-btn:hover {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.chat-item.active::before {
+  content: '';
+  position: absolute;
+  left: -1px;
+  top: 9px;
+  bottom: 9px;
+  width: 3px;
+  border-radius: 0 4px 4px 0;
+  background: linear-gradient(180deg, var(--color-primary-soft), #a855f7);
+  box-shadow: 0 0 10px rgba(129, 140, 248, 0.65);
 }
 
 .chat-icon {
@@ -1267,12 +1559,36 @@ const handleLogout = async () => {
   display: none;
 }
 
+.header-title-wrap {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
 .header-title {
   font-size: 16px;
   font-weight: 600;
   color: var(--text-primary);
-  flex: 1;
   letter-spacing: 0.2px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+.header-model-tag {
+  flex-shrink: 0;
+  max-width: 150px;
+  padding: 2px 9px;
+  border-radius: 20px;
+  border: 1px solid rgba(99, 102, 241, 0.25);
+  background: rgba(99, 102, 241, 0.1);
+  color: var(--color-primary);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.3px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1280,27 +1596,36 @@ const handleLogout = async () => {
 
 .header-actions {
   display: flex;
-  gap: 6px;
-  align-items: center;
-}
-
-.user-info {
-  display: flex;
-  align-items: center;
   gap: 8px;
-  padding: 4px 10px;
-  border-radius: 20px;
-  background: var(--bg-surface-soft);
-  border: 1px solid var(--border-subtle);
+  align-items: center;
 }
 
-.user-name {
-  font-size: 13px;
+.header-actions .header-action {
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border-radius: 10px;
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-surface-soft);
   color: var(--text-secondary);
-  max-width: 100px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  transition: all 0.2s ease;
+  box-shadow: none;
+}
+
+.header-actions .header-action:hover {
+  color: var(--color-primary);
+  border-color: var(--color-primary-soft);
+  background: var(--bg-surface);
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-sm);
+}
+
+.desktop-action {
+  display: inline-flex;
+}
+
+.mobile-action {
+  display: none;
 }
 
 /* ========== 消息区域 ========== */
@@ -1364,9 +1689,54 @@ const handleLogout = async () => {
   to { opacity: 1; transform: translateY(0); }
 }
 
+.empty-icon-wrap {
+  position: relative;
+  width: 108px;
+  height: 108px;
+  display: grid;
+  place-items: center;
+  margin-bottom: 4px;
+}
+
+.empty-icon-glow {
+  position: absolute;
+  inset: -24px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(99, 102, 241, 0.35), transparent 65%);
+  filter: blur(18px);
+  animation: glowPulse 3.2s ease-in-out infinite;
+}
+
+@keyframes glowPulse {
+  0%, 100% { opacity: 0.55; transform: scale(0.96); }
+  50% { opacity: 0.9; transform: scale(1.06); }
+}
+
 .empty-icon {
-  opacity: 0.9;
-  filter: drop-shadow(0 8px 24px rgba(99, 102, 241, 0.35));
+  position: relative;
+  width: 84px;
+  height: 84px;
+  display: grid;
+  place-items: center;
+  border-radius: 26px;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  background: linear-gradient(135deg, var(--color-primary) 0%, #8b5cf6 100%);
+  color: #fff;
+  box-shadow:
+    0 12px 32px rgba(99, 102, 241, 0.35),
+    inset 0 1px 0 rgba(255, 255, 255, 0.35);
+  transform: rotate(-4deg);
+}
+
+.empty-eyebrow {
+  padding: 5px 12px;
+  border-radius: 20px;
+  border: 1px solid rgba(99, 102, 241, 0.22);
+  background: rgba(99, 102, 241, 0.08);
+  color: var(--color-primary);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 1.8px;
 }
 
 .empty-state h2 {
@@ -1410,11 +1780,31 @@ const handleLogout = async () => {
   box-shadow: var(--shadow-sm);
 }
 
+.quick-arrow {
+  opacity: 0;
+  transform: translateX(-4px);
+  transition: all 0.2s ease;
+}
+
+.quick-question:hover .quick-arrow {
+  opacity: 1;
+  transform: translateX(0);
+}
+
 .quick-question:hover {
   border-color: var(--color-primary-soft);
   color: var(--color-primary);
   transform: translateY(-2px);
   box-shadow: var(--shadow-glow);
+}
+
+.messages-stack {
+  width: 100%;
+  max-width: 900px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
 }
 
 .message {
@@ -1482,6 +1872,20 @@ const handleLogout = async () => {
   color: var(--text-secondary);
 }
 
+.message-model {
+  max-width: 150px;
+  padding: 1px 7px;
+  border-radius: 20px;
+  border: 1px solid rgba(99, 102, 241, 0.18);
+  background: rgba(99, 102, 241, 0.08);
+  color: var(--color-primary);
+  font-size: 10px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .message-bubble {
   padding: 14px 18px;
   border-radius: var(--radius-lg);
@@ -1522,14 +1926,60 @@ const handleLogout = async () => {
 .message-actions {
   display: flex;
   gap: 4px;
-  padding: 0 4px;
-  margin-top: 4px;
+  padding: 0 2px;
+  margin-top: 2px;
   opacity: 0;
-  transition: opacity 0.2s;
+  transform: translateY(-2px);
+  transition: opacity 0.2s ease, transform 0.2s ease;
 }
 
-.ai-message:hover .message-actions {
+.message:hover .message-actions,
+.message:focus-within .message-actions {
   opacity: 1;
+  transform: translateY(0);
+}
+
+.user-message .message-actions {
+  justify-content: flex-end;
+}
+
+.message-actions .el-button {
+  height: 28px;
+  padding: 0 9px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  color: var(--text-tertiary);
+  font-size: 12px;
+  transition: all 0.2s ease;
+}
+
+.message-actions .el-button:hover {
+  color: var(--color-primary);
+  border-color: var(--border-subtle);
+  background: var(--bg-surface);
+  box-shadow: var(--shadow-sm);
+}
+
+.message-streaming {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--color-primary);
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.message-streaming i {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--color-primary);
+  animation: statusPulse 1.1s ease-in-out infinite;
+}
+
+@keyframes statusPulse {
+  0%, 100% { opacity: 0.35; transform: scale(0.85); }
+  50% { opacity: 1; transform: scale(1); }
 }
 
 /* 滚动回底部按钮 */
@@ -1562,88 +2012,152 @@ const handleLogout = async () => {
 
 /* 输入区域 */
 .chat-input {
-  padding: 18px 24px 20px;
-  background: var(--bg-header);
-  backdrop-filter: var(--glass-blur);
-  -webkit-backdrop-filter: var(--glass-blur);
-  border-top: 1px solid var(--border-subtle);
-  display: flex;
-  gap: 12px;
-  align-items: flex-end;
-  flex-wrap: wrap;
   position: relative;
   z-index: 5;
+  padding: 10px 24px 18px;
+  background: linear-gradient(180deg, transparent 0%, var(--bg-base) 62%);
 }
 
-/* 模型选择器 */
+.composer {
+  width: 100%;
+  max-width: 900px;
+  margin: 0 auto;
+  padding: 12px 14px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 20px;
+  background: var(--bg-surface);
+  box-shadow: var(--shadow-md);
+  transition: border-color 0.25s ease, box-shadow 0.25s ease;
+}
+
+.composer.focused {
+  border-color: var(--color-primary);
+  box-shadow: var(--shadow-glow);
+}
+
+.composer-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 2px 4px 10px;
+}
+
 .model-selector {
-  flex: 1;
   display: flex;
   align-items: center;
   gap: 8px;
+  min-width: 0;
+}
+
+.model-icon {
+  color: var(--color-primary);
+  font-size: 15px;
 }
 
 .model-select {
-  width: 200px;
+  width: 180px;
+}
+
+.model-select :deep(.el-select__wrapper) {
+  min-height: 32px;
+  border-radius: 10px;
+  border: 1px solid transparent;
+  background: var(--bg-surface-soft);
+  box-shadow: none !important;
+  transition: border-color 0.2s ease, background 0.2s ease;
+}
+
+.model-select :deep(.el-select__wrapper.is-focused) {
+  border-color: var(--color-primary-soft);
+  background: var(--bg-surface);
 }
 
 .model-hint {
-  font-size: 12px;
-  color: var(--text-tertiary);
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  border-radius: 20px;
+  background: rgba(245, 158, 11, 0.12);
+  color: var(--color-warning);
+  font-size: 11px;
   flex-shrink: 0;
 }
 
-.model-hint.locked {
-  color: var(--color-warning);
+.composer-meta {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-left: auto;
 }
 
-.input-wrapper {
-  flex: 1;
+.composer-shortcut {
+  font-size: 11px;
+  color: var(--text-tertiary);
+}
+
+.composer-count {
+  font-size: 11px;
+  color: var(--text-tertiary);
+  font-variant-numeric: tabular-nums;
+}
+
+.composer-count.over {
+  color: var(--color-danger);
+  font-weight: 600;
+}
+
+.composer-body {
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
 }
 
 .message-input {
-  background: var(--bg-surface-soft) !important;
-  border: 1px solid var(--border-subtle) !important;
-  border-radius: var(--radius-lg) !important;
-  transition: all 0.25s ease;
-}
-
-.message-input:hover {
-  border-color: var(--border-strong) !important;
-}
-
-.message-input:focus-within {
-  border-color: var(--color-primary) !important;
-  box-shadow: var(--shadow-glow);
-  background: var(--bg-surface) !important;
-}
-
-.message-input :deep(.el-textarea__inner) {
+  flex: 1;
+  min-width: 0;
   background: transparent !important;
   border: none !important;
   box-shadow: none !important;
-  resize: none;
-  padding: 14px 16px;
+}
+
+.message-input :deep(.el-textarea__inner) {
+  min-height: 64px;
+  padding: 6px 6px 8px;
+  border: none !important;
+  background: transparent !important;
+  box-shadow: none !important;
   color: var(--text-primary);
+  font-size: 14.5px;
+  line-height: 1.6;
+  resize: none;
+}
+
+.message-input :deep(.el-textarea__inner)::placeholder {
+  color: var(--text-tertiary);
 }
 
 .input-limit-tip {
-  margin-top: 6px;
+  margin: 0;
+  padding: 6px 6px 0;
   font-size: 12px;
   color: var(--color-danger);
 }
 
-.send-btn, .stop-btn {
-  height: 44px;
-  padding: 0 22px;
-  border-radius: var(--radius-md);
+.send-btn,
+.stop-btn {
+  height: 42px;
+  padding: 0 18px;
+  border-radius: 12px;
   font-weight: 500;
+  flex-shrink: 0;
   transition: all 0.2s;
 }
 
 .send-btn {
-  background: linear-gradient(135deg, var(--color-primary) 0%, #8b5cf6 100%);
   border: none;
+  background: linear-gradient(135deg, var(--color-primary) 0%, #8b5cf6 100%);
   box-shadow: 0 4px 16px rgba(99, 102, 241, 0.4);
 }
 
@@ -1658,54 +2172,10 @@ const handleLogout = async () => {
 }
 
 .stop-btn {
-  background: linear-gradient(135deg, #ef4444 0%, #f97316 100%);
   border: none;
+  background: linear-gradient(135deg, #ef4444 0%, #f97316 100%);
   color: #fff;
   box-shadow: 0 4px 16px rgba(239, 68, 68, 0.4);
-}
-
-/* 代码块语言标签 */
-.code-lang {
-  position: absolute;
-  top: 10px;
-  left: 14px;
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.5px;
-  text-transform: uppercase;
-  color: var(--color-primary-soft);
-  opacity: 0.8;
-}
-
-/* 代码块复制按钮 */
-.code-copy-btn {
-  position: absolute;
-  top: 8px;
-  right: 8px;
-  padding: 5px 7px;
-  background: rgba(255, 255, 255, 0.12);
-  color: var(--code-text);
-  border: none;
-  border-radius: 6px;
-  cursor: pointer;
-  opacity: 0;
-  transition: all 0.2s;
-  display: flex;
-  align-items: center;
-  backdrop-filter: blur(4px);
-}
-
-.markdown-body pre:hover .code-copy-btn {
-  opacity: 1;
-}
-
-.code-copy-btn:hover {
-  background: rgba(255, 255, 255, 0.25);
-}
-
-.code-copy-btn.copied {
-  color: var(--color-success);
-  opacity: 1;
 }
 
 /* 移动端遮罩 */
@@ -1739,35 +2209,124 @@ const handleLogout = async () => {
     display: flex;
   }
 
+  .chat-header {
+    padding: 0 12px;
+    gap: 8px;
+  }
+
+  .header-title {
+    font-size: 15px;
+  }
+
+  .header-model-tag {
+    max-width: 92px;
+  }
+
+  .header-actions {
+    gap: 4px;
+  }
+
+  .header-actions .header-action {
+    width: 30px;
+    height: 30px;
+    border-radius: 9px;
+  }
+
+  .desktop-action {
+    display: none !important;
+  }
+
+  .mobile-action {
+    display: inline-flex;
+  }
+
   .chat-messages {
-    padding: 18px 16px;
+    padding: 18px 12px;
+  }
+
+  .messages-stack {
+    gap: 18px;
   }
 
   .message {
-    max-width: 92%;
+    max-width: 94%;
   }
 
   .chat-input {
-    padding: 12px 16px;
+    padding: 8px 12px 12px;
+  }
+
+  .composer {
+    padding: 10px 12px;
+    border-radius: 18px;
+  }
+
+  .composer-toolbar {
+    padding-bottom: 8px;
+  }
+
+  .composer-shortcut {
+    display: none;
   }
 
   .model-selector {
-    order: -1;
-    width: 100%;
-    margin-bottom: 8px;
+    flex: 1;
   }
 
-  .user-info {
+  .model-select {
+    width: 150px;
+  }
+
+  .model-hint {
     display: none;
   }
 
   .quick-questions {
     padding: 0 8px;
+    width: 100%;
+  }
+
+  .quick-question {
+    width: 100%;
+    justify-content: flex-start;
+  }
+
+  .quick-arrow {
+    margin-left: auto;
+    opacity: 1;
+    transform: none;
+  }
+
+  .empty-icon-wrap {
+    width: 92px;
+    height: 92px;
+  }
+
+  .empty-icon {
+    width: 72px;
+    height: 72px;
+    border-radius: 22px;
+  }
+
+  .empty-state h2 {
+    font-size: 22px;
+    text-align: center;
   }
 
   .scroll-bottom-btn {
-    bottom: 90px;
-    right: 18px;
+    bottom: 152px;
+    right: 16px;
+  }
+
+  .send-btn,
+  .stop-btn {
+    width: 42px;
+    padding: 0;
+  }
+
+  .send-btn .btn-label,
+  .stop-btn .btn-label {
+    display: none;
   }
 
   .decor-blob {

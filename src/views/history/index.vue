@@ -7,7 +7,10 @@
           返回对话
         </el-button>
         <div class="title-block">
-          <h2>对话历史</h2>
+          <div class="title-row">
+            <h2>对话历史</h2>
+            <span class="history-count">{{ chatHistory.length }}</span>
+          </div>
           <p class="subtitle">管理你的所有 AI 对话记录</p>
         </div>
       </div>
@@ -139,6 +142,9 @@ const deleteChat = async (sessionId) => {
 }
 
 .history-header {
+  max-width: 980px;
+  margin-left: auto;
+  margin-right: auto;
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -151,6 +157,24 @@ const deleteChat = async (sessionId) => {
   display: flex;
   align-items: center;
   gap: 14px;
+}
+
+.title-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.history-count {
+  min-width: 22px;
+  padding: 1px 8px;
+  border-radius: 20px;
+  border: 1px solid rgba(99, 102, 241, 0.22);
+  background: rgba(99, 102, 241, 0.1);
+  color: var(--color-primary);
+  font-size: 11px;
+  font-weight: 600;
+  text-align: center;
 }
 
 .title-block h2 {
@@ -193,6 +217,9 @@ const deleteChat = async (sessionId) => {
 }
 
 .history-list {
+  max-width: 980px;
+  margin-left: auto;
+  margin-right: auto;
   display: flex;
   flex-direction: column;
   gap: 12px;

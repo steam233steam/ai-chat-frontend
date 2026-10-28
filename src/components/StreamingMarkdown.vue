@@ -24,10 +24,18 @@ const tw = useTypewriter({ fps: 30, charsPerTick: 4, stableLength: 400 })
 // 已喂入打字机的 content 长度（用于只喂增量，避免重复）
 let fedLen = 0
 
-// content 增长 → 把新片段喂进打字机
+// stable 前缀渲染缓存（stable 一旦定型就不再变化，避免每帧重算长文本）
+const stableHtml = ref('')
+const lastStable = ref('')
+
 watch(
   () => props.content,
   (next) => {
+    // 历史消息 / 已结束的消息不需要打字机，直接走最终态渲染
+    if (!props.streaming) {
+      fedLen = next.length
+      return
+    }
     if (next.length < fedLen) {
       // 内容被重置（重新生成 / 切换消息）
       tw.reset()
@@ -41,37 +49,39 @@ watch(
   { immediate: true }
 )
 
-// 流结束 → 立即吐完剩余缓冲
 watch(
   () => props.streaming,
-  (still) => {
-    if (!still) tw.flush()
-  }
-)
-
-// stable 前缀变化 → 渲染一次并缓存（避免每帧重算长前缀）
-const stableHtml = ref('')
-const lastStable = ref('')
-watch(
-  () => tw.stable.value,
-  (stable) => {
-    if (stable && stable !== lastStable.value) {
-      stableHtml.value = renderMarkdown(stable)
-      lastStable.value = stable
+  (still, wasStreaming) => {
+    if (still) {
+      // 理论上消息实例不会从历史态切换为流式态，这里做一次兜底：
+      // 若发生，重新把已有内容喂给打字机，避免只吐增量导致前半段丢失。
+      if (!wasStreaming) {
+        tw.reset()
+        fedLen = 0
+        if (props.content) {
+          tw.feed(props.content)
+          fedLen = props.content.length
+        }
+      }
+      return
     }
+    // 流结束：立即吐完缓冲；最终态由 html 直接使用完整 content
+    tw.flush()
+    lastStable.value = tw.stable.value
+    stableHtml.value = ''
   },
   { immediate: true }
 )
 
-// 流结束时重置缓存，下次重新生成再积累
+// stable 变化时只渲染一次；stable 被重置为空时也要清缓存，否则会残留旧 HTML
 watch(
-  () => props.streaming,
-  (still) => {
-    if (!still) {
-      stableHtml.value = ''
-      lastStable.value = ''
-    }
-  }
+  () => tw.stable.value,
+  (stable) => {
+    if (stable === lastStable.value) return
+    stableHtml.value = stable ? renderMarkdown(stable) : ''
+    lastStable.value = stable
+  },
+  { immediate: true }
 )
 
 const html = computed(() => {

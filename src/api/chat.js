@@ -9,13 +9,6 @@ export const getModels = async () => {
   return res.code === 200 ? (res.data || []) : []
 }
 
-// 发送消息（同步）
-export const sendMessage = (sessionId, question, modelName) => {
-  const params = { sessionid: sessionId, question }
-  if (modelName) params.modelName = modelName
-  return api.post('/chat/ask', null, { params })
-}
-
 // 发送消息（流式）
 // onChunk(chunk)    —— 每收到一个数据片段就回调
 // onComplete()      —— 流正常结束
@@ -56,18 +49,26 @@ export const sendMessageStream = async (sessionId, question, onChunk, onComplete
 
   if (!response.ok) {
     let message = `HTTP ${response.status}`
-    let error = null
     if (response.status === 409) {
       message = '该会话已锁定模型，要切换请新建会话'
-      error = new Error(message)
-      error.code = 409
-      error.business = true
     } else if (response.status === 400) {
       message = '请求参数错误，请稍后重试'
     } else if (response.status === 500) {
       message = 'AI 服务暂时不可用，请稍后重试'
     }
-    if (onError) onError(error || new Error(message))
+
+    // 409 的后端 message 会带上真实锁定模型，优先展示
+    try {
+      const body = await response.json()
+      if (body?.message) message = body.message
+    } catch (_) {
+      // 响应不是 JSON（例如网关错误页）时沿用上面的兜底文案
+    }
+
+    const error = new Error(message)
+    error.code = response.status
+    error.business = true
+    if (onError) onError(error)
     return
   }
 

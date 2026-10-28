@@ -1,4 +1,5 @@
 import { ref, onScopeDispose } from 'vue'
+import { findStableBoundary } from '@/utils/fence'
 
 /**
  * 平滑打字机引擎（LobeChat 式：buffer + queue + 匀速消费）
@@ -33,9 +34,11 @@ export function useTypewriter(options = {}) {
 
   const retargetStable = () => {
     const target = Math.max(0, fullText.length - stableLength)
-    if (target > stableLen) {
-      stable.value = fullText.slice(0, target)
-      stableLen = target
+    if (target <= stableLen) return
+    const boundary = findStableBoundary(fullText, target, stableLen)
+    if (boundary > stableLen) {
+      stable.value = fullText.slice(0, boundary)
+      stableLen = boundary
     }
   }
 

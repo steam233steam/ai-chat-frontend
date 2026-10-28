@@ -16,7 +16,7 @@
       <el-card class="card">
         <template #header>
           <div class="card-header-row">
-            <span class="card-title">外观</span>
+            <span class="card-title"><el-icon><Sunny /></el-icon>外观</span>
             <el-switch
               v-model="isDark"
               active-text="深色"
@@ -32,7 +32,7 @@
       <!-- 账户信息 -->
       <el-card v-loading="loading" class="card">
         <template #header>
-          <span class="card-title">账户信息</span>
+          <span class="card-title"><el-icon><User /></el-icon>账户信息</span>
         </template>
 
         <div class="account">
@@ -70,12 +70,12 @@
       <!-- 服务信息 -->
       <el-card class="card">
         <template #header>
-          <span class="card-title">服务信息</span>
+          <span class="card-title"><el-icon><Connection /></el-icon>服务信息</span>
         </template>
         <el-descriptions :column="1" border>
           <el-descriptions-item label="接口地址">{{ apiBaseUrl }}</el-descriptions-item>
-          <el-descriptions-item label="AI 模型">服务端 Ollama（qwen2.5-coder:7b），由后端统一配置</el-descriptions-item>
-          <el-descriptions-item label="会话存储">Redis，历史记录保留 7 天</el-descriptions-item>
+          <el-descriptions-item label="AI 模型">多模型路由（Ollama / DeepSeek），白名单由后端统一配置</el-descriptions-item>
+          <el-descriptions-item label="会话存储">MySQL 持久化 + Redis 热缓存，历史消息支持游标分页</el-descriptions-item>
         </el-descriptions>
         <p class="hint">
           接口地址取自 <code>.env</code> 的 <code>VITE_API_BASE_URL</code>；模型与密钥由后端管理，前端不再单独保存。
@@ -85,7 +85,7 @@
       <!-- 其他 -->
       <el-card class="card">
         <template #header>
-          <span class="card-title">其他</span>
+          <span class="card-title"><el-icon><MoreFilled /></el-icon>其他</span>
         </template>
         <div class="actions">
           <el-button @click="router.push('/history')">
@@ -106,7 +106,7 @@
 import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { ArrowLeft, Clock, SwitchButton } from '@element-plus/icons-vue'
+import { ArrowLeft, Clock, SwitchButton, Sunny, User, Connection, MoreFilled } from '@element-plus/icons-vue'
 import { getUserInfo, updateProfile, logout } from '@/api/user'
 import { useTheme } from '@/composables/useTheme'
 
@@ -120,7 +120,10 @@ const loggingOut = ref(false)
 
 const { isDark } = useTheme()
 
-const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || window.location.origin
+// 开发环境走 Vite 代理，生产环境走 nginx 同源反代（前端请求固定是 /api）
+const apiBaseUrl = import.meta.env.DEV
+  ? `${import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080'}（Vite 代理）`
+  : `${window.location.origin}/api（同源反代）`
 
 const avatarText = computed(() => userInfo.value?.name?.charAt(0) || 'U')
 
@@ -215,6 +218,9 @@ onMounted(loadUser)
 }
 
 .page-header {
+  max-width: 760px;
+  margin-left: auto;
+  margin-right: auto;
   display: flex;
   align-items: center;
   gap: 14px;
@@ -252,7 +258,9 @@ onMounted(loadUser)
   display: flex;
   flex-direction: column;
   gap: 16px;
-  max-width: 720px;
+  max-width: 760px;
+  margin-left: auto;
+  margin-right: auto;
 }
 
 .card {
@@ -261,6 +269,12 @@ onMounted(loadUser)
   border-radius: 16px !important;
   box-shadow: var(--shadow-sm);
   overflow: hidden;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.card:hover {
+  border-color: var(--color-primary-soft) !important;
+  box-shadow: var(--shadow-md);
 }
 
 .card-header-row {
@@ -270,9 +284,16 @@ onMounted(loadUser)
 }
 
 .card-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
   font-size: 15px;
   font-weight: 600;
   color: var(--text-primary);
+}
+
+.card-title .el-icon {
+  color: var(--color-primary);
 }
 
 .theme-switch {

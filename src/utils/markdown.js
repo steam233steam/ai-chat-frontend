@@ -1,12 +1,17 @@
 import { marked } from 'marked'
 import DOMPurify from 'dompurify'
 import { nextTick } from 'vue'
+import { findUnclosedFence } from './fence'
+import { highlightRenderer } from './codeHighlight'
 
 // marked 配置：换行转 <br>、启用 GFM
 marked.setOptions({
   breaks: true,
   gfm: true
 })
+
+// 代码围栏交给 highlight.js 渲染（未知语言回退纯文本）
+marked.use({ renderer: highlightRenderer })
 
 /**
  * 流式感知渲染：在打字机输出过程中，代码块 fence 可能尚未闭合
@@ -17,8 +22,9 @@ marked.setOptions({
 export function renderStreamingMarkdown(text) {
   if (!text) return ''
   try {
-    const fenceCount = (text.match(/```/g) || []).length
-    const safe = fenceCount % 2 === 1 ? text + '\n```' : text
+    // 未闭合围栏补齐临时闭合符，避免代码块在流式过程中被当成普通文本
+    const open = findUnclosedFence(text)
+    const safe = open ? text + '\n' + open.marker : text
     const raw = marked.parse(safe)
     return DOMPurify.sanitize(raw)
   } catch (error) {
@@ -53,19 +59,19 @@ export async function copyText(text) {
     }
   }
 
+  const textarea = document.createElement('textarea')
   try {
-    const textarea = document.createElement('textarea')
     textarea.value = text
     textarea.style.position = 'fixed'
     textarea.style.opacity = '0'
     document.body.appendChild(textarea)
     textarea.select()
-    const ok = document.execCommand('copy')
-    document.body.removeChild(textarea)
-    return ok
+    return document.execCommand('copy')
   } catch (error) {
     console.error('复制失败', error)
     return false
+  } finally {
+    textarea.remove()
   }
 }
 
@@ -94,9 +100,9 @@ export async function enhanceCodeBlocks(container) {
       }
     })
 
-    // 语言标签
+    // 语言标签（优先使用 renderer 写入的 data-lang，保留用户原始写法）
     const codeEl = pre.querySelector('code')
-    const lang = codeEl?.className?.match(/language-([\w-]+)/)?.[1]
+    const lang = codeEl?.dataset?.lang || codeEl?.className?.match(/language-([\w-]+)/)?.[1]
     if (lang && !pre.querySelector('.code-lang')) {
       const langEl = document.createElement('span')
       langEl.className = 'code-lang'
@@ -114,6 +120,7 @@ export function exportChatAsJSON(messages) {
   const exportData = messages.map((msg) => ({
     role: msg.role,
     content: msg.content,
+    model: msg.model || null,
     timestamp: msg.timestamp
   }))
   return JSON.stringify(exportData, null, 2)
