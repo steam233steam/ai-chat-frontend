@@ -10,7 +10,7 @@
 ## P2 - 工程质量
 
 - [ ] TypeScript 渐进式迁移（先 API 层类型定义，再 store，最后组件）
-- [ ] ChatView 组件拆分（Sidebar / MessageList / MessageItem / MessageInput / CodeBlock / WelcomeScreen）
+- [x] ChatView 组件拆分（✅ 2026-10-28：Sidebar / ChatMessage / ChatComposer / WelcomeScreen 已抽取；滚动与分页仍由 ChatView 统一管理）
 - [x] 路由守卫去重（移除 App.vue 中的 token 检查，统一在 router 守卫处理）
 - [ ] 错误边界与全局错误提示（网络错误、API 错误、流式错误统一在消息气泡内展示）
 - [x] 环境变量管理（`.env.development` / `.env.production`，Vite 代理读取 `loadEnv`）
@@ -27,6 +27,13 @@
 - [ ] 长消息列表性能（虚拟滚动或分页）
 
 ## 变更记录（2026-10-28）
+
+**结构拆分**
+
+- `ChatView.vue` 从 2300+ 行降到约 1050 行
+- 新增 `ChatSidebar`（会话搜索/重命名/删除/用户卡）、`ChatMessage`（气泡/模型/复制/动画）、`ChatComposer`（模型/输入/发送）、`WelcomeScreen`（空状态/快捷问题）
+- 拆分后聊天、409、重命名/删除、空状态、移动端与深色模式 E2E 全部通过
+
 
 **视觉与主题**
 

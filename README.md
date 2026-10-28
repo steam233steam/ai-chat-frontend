@@ -76,7 +76,7 @@ src/
 ├── api/          # request.js（Axios 封装）+ chat.js + user.js
 ├── router/       # 路由与登录守卫
 ├── views/        # chat / login / history / settings / 404 / layout
-├── components/   # StreamingMarkdown / OfflineBanner
+├── components/   # ChatSidebar / ChatMessage / ChatComposer / WelcomeScreen / StreamingMarkdown / OfflineBanner
 ├── composables/  # useTheme / useTypewriter / useNetwork
 └── utils/        # markdown.js（渲染/复制/导出）、sse.js（SSE 解析）、fence.js、codeHighlight.js
 ```
@@ -97,7 +97,7 @@ Vue 3 · Vite · Element Plus · Vue Router 4 · Axios · marked · highlight.js
 
 ## 变更记录
 
-- **v6.1（2026-10-28）**：视觉设计系统与暗色模式；LobeChat 式居中对话栏 / composer / 侧边栏用户卡 / 会话搜索；`highlight.js` 语法高亮；会话锁模型 409 处理；流式 Markdown 代码围栏修复；修复主题开关、历史分页竞态与历史消息打字机空转
+- **v6.1（2026-10-28）**：视觉设计系统与暗色模式；LobeChat 式居中对话栏 / composer / 侧边栏用户卡 / 会话搜索；`highlight.js` 语法高亮；ChatView 拆分为 Sidebar / Message / Composer / Welcome 组件；会话锁模型 409 处理；流式 Markdown 代码围栏修复；修复主题开关、历史分页竞态与历史消息打字机空转
 - **v5.1（2026-10-26）**：模型选择、历史分页加载、8000 字输入限制、顶部工具栏（历史/设置/导出/登出）、业务错误交由页面处理
 - **v5.0（2026-09-17）**：SSE 解析器独立成 `utils/sse.js`，支持前导空格保留与 CRLF 兼容
 - **v4.0（2026-09-26）**：登录系统重构（验证码 + 密码双模式）、token 独立存储、聊天接口路径统一为 `/chat/*`
