@@ -1,7 +1,16 @@
 <template>
   <div class="login-container">
-    <div class="login-box">
-      <h2 class="login-title">AI Chat</h2>
+    <div class="login-blob login-blob-1"></div>
+    <div class="login-blob login-blob-2"></div>
+
+    <div class="login-box login-box-enter">
+      <div class="login-logo">
+        <el-icon :size="28" color="var(--color-primary)"><ChatDotRound /></el-icon>
+      </div>
+      <h2 class="login-title">
+        <span class="shiny-text">AI Chat</span>
+      </h2>
+      <p class="login-subtitle">欢迎回来，开始你的智能对话</p>
 
       <!-- 步骤指示器 -->
       <div class="steps">
@@ -21,184 +30,194 @@
         </div>
       </div>
 
-      <!-- 步骤1: 手机号 + 验证码登录 -->
-      <el-form
-        v-if="currentStep === 1"
-        ref="phoneFormRef"
-        :model="phoneForm"
-        :rules="phoneRules"
-        class="login-form"
-        autocomplete="off"
-      >
-        <el-form-item prop="phone">
-          <el-input
-            v-model="phoneForm.phone"
-            placeholder="请输入手机号"
-            :prefix-icon="Iphone"
-            maxlength="11"
-            autocomplete="off"
-          />
-        </el-form-item>
-
-        <el-form-item prop="code">
-          <div class="code-input-wrapper">
+      <!-- 步骤切换过渡 -->
+      <Transition :name="stepTransition" mode="out-in">
+        <!-- 步骤1: 手机号 + 验证码登录 -->
+        <el-form
+          v-if="currentStep === 1"
+          ref="phoneFormRef"
+          :model="phoneForm"
+          :rules="phoneRules"
+          class="login-form"
+          autocomplete="off"
+        >
+          <el-form-item prop="phone">
             <el-input
-              v-model="phoneForm.code"
-              placeholder="请输入验证码"
-              :prefix-icon="Message"
-              maxlength="6"
+              v-model="phoneForm.phone"
+              placeholder="请输入手机号"
+              :prefix-icon="Iphone"
+              maxlength="11"
               autocomplete="off"
+              size="large"
             />
+          </el-form-item>
+
+          <el-form-item prop="code">
+            <div class="code-input-wrapper">
+              <el-input
+                v-model="phoneForm.code"
+                placeholder="请输入验证码"
+                :prefix-icon="Message"
+                maxlength="6"
+                autocomplete="off"
+                size="large"
+              />
+              <el-button
+                :disabled="countdown > 0"
+                @click="sendCode"
+                class="send-code-btn"
+              >
+                {{ countdown > 0 ? `${countdown}s` : '发送验证码' }}
+              </el-button>
+            </div>
+          </el-form-item>
+
+          <el-form-item>
             <el-button
-              :disabled="countdown > 0"
-              @click="sendCode"
-              class="send-code-btn"
+              type="primary"
+              class="login-btn"
+              :loading="loading"
+              @click="verifyPhone"
             >
-              {{ countdown > 0 ? `${countdown}s` : '发送验证码' }}
+              下一步
             </el-button>
+          </el-form-item>
+
+          <div class="login-method-switch">
+            <span>已有账号？</span>
+            <el-button link @click="switchToPasswordLogin">密码登录</el-button>
           </div>
-        </el-form-item>
+        </el-form>
 
-        <el-form-item>
-          <el-button
-            type="primary"
-            class="login-btn"
-            :loading="loading"
-            @click="verifyPhone"
-          >
-            下一步
-          </el-button>
-        </el-form-item>
-
-        <div class="login-method-switch">
-          <span>已有账号？</span>
-          <el-button link @click="switchToPasswordLogin">密码登录</el-button>
-        </div>
-      </el-form>
-
-      <!-- 步骤2: 新用户设置密码 -->
-      <el-form
-        v-else-if="currentStep === 2"
-        ref="passwordFormRef"
-        :model="passwordForm"
-        :rules="passwordRules"
-        class="login-form"
-        autocomplete="off"
-      >
-        <div class="step-tip">
-          <el-icon><InfoFilled /></el-icon>
-          <div>
-            <div>首次登录，请设置密码（需要重新获取一次验证码）</div>
-            <div class="step-tip-sub">
-              {{ countdown > 0 ? `${countdown} 秒后可重新获取验证码` : '点击右侧“重新发送”获取验证码' }}
+        <!-- 步骤2: 新用户设置密码 -->
+        <el-form
+          v-else-if="currentStep === 2"
+          ref="passwordFormRef"
+          :model="passwordForm"
+          :rules="passwordRules"
+          class="login-form"
+          autocomplete="off"
+        >
+          <div class="step-tip">
+            <el-icon :size="18"><InfoFilled /></el-icon>
+            <div>
+              <div>首次登录，请设置密码（需重新获取一次验证码）</div>
+              <div class="step-tip-sub">
+                {{ countdown > 0 ? `${countdown} 秒后可重新获取验证码` : '点击右侧“重新发送”获取验证码' }}
+              </div>
             </div>
           </div>
-        </div>
 
-        <el-form-item prop="code">
-          <div class="code-input-wrapper">
+          <el-form-item prop="code">
+            <div class="code-input-wrapper">
+              <el-input
+                v-model="passwordForm.code"
+                placeholder="请输入新验证码"
+                :prefix-icon="Message"
+                maxlength="6"
+                autocomplete="off"
+                size="large"
+              />
+              <el-button
+                :disabled="countdown > 0"
+                @click="sendCodeForPassword"
+                class="send-code-btn"
+              >
+                {{ countdown > 0 ? `${countdown}s` : '重新发送' }}
+              </el-button>
+            </div>
+          </el-form-item>
+
+          <el-form-item prop="password">
             <el-input
-              v-model="passwordForm.code"
-              placeholder="请输入新验证码"
-              :prefix-icon="Message"
-              maxlength="6"
-              autocomplete="off"
+              v-model="passwordForm.password"
+              type="password"
+              placeholder="请输入密码（4-32位字母/数字/下划线）"
+              :prefix-icon="Lock"
+              show-password
+              autocomplete="new-password"
+              size="large"
             />
+          </el-form-item>
+
+          <el-form-item prop="confirmPassword">
+            <el-input
+              v-model="passwordForm.confirmPassword"
+              type="password"
+              placeholder="请再次输入密码"
+              :prefix-icon="Lock"
+              show-password
+              autocomplete="new-password"
+              size="large"
+            />
+          </el-form-item>
+
+          <el-form-item>
             <el-button
-              :disabled="countdown > 0"
-              @click="sendCodeForPassword"
-              class="send-code-btn"
+              type="primary"
+              class="login-btn"
+              :loading="loading"
+              @click="setPasswordAndLogin"
             >
-              {{ countdown > 0 ? `${countdown}s` : '重新发送' }}
+              设置并登录
             </el-button>
+          </el-form-item>
+
+          <div class="login-method-switch">
+            <el-button link @click="currentStep = 1">返回</el-button>
           </div>
-        </el-form-item>
+        </el-form>
 
-        <el-form-item prop="password">
-          <el-input
-            v-model="passwordForm.password"
-            type="password"
-            placeholder="请输入密码（4-32位字母/数字/下划线）"
-            :prefix-icon="Lock"
-            show-password
-            autocomplete="new-password"
-          />
-        </el-form-item>
+        <!-- 步骤3: 密码登录 -->
+        <el-form
+          v-else-if="currentStep === 3"
+          ref="passwordLoginFormRef"
+          :model="passwordLoginForm"
+          :rules="passwordLoginRules"
+          class="login-form"
+          autocomplete="off"
+        >
+          <el-form-item prop="phone">
+            <el-input
+              v-model="passwordLoginForm.phone"
+              placeholder="请输入手机号"
+              :prefix-icon="Iphone"
+              maxlength="11"
+              autocomplete="off"
+              size="large"
+            />
+          </el-form-item>
 
-        <el-form-item prop="confirmPassword">
-          <el-input
-            v-model="passwordForm.confirmPassword"
-            type="password"
-            placeholder="请再次输入密码"
-            :prefix-icon="Lock"
-            show-password
-            autocomplete="new-password"
-          />
-        </el-form-item>
+          <el-form-item prop="password">
+            <el-input
+              v-model="passwordLoginForm.password"
+              type="password"
+              placeholder="请输入密码"
+              :prefix-icon="Lock"
+              show-password
+              autocomplete="current-password"
+              size="large"
+              @keyup.enter="handlePasswordLogin"
+            />
+          </el-form-item>
 
-        <el-form-item>
-          <el-button
-            type="primary"
-            class="login-btn"
-            :loading="loading"
-            @click="setPasswordAndLogin"
-          >
-            设置并登录
-          </el-button>
-        </el-form-item>
+          <el-form-item>
+            <el-button
+              type="primary"
+              class="login-btn"
+              :loading="loading"
+              @click="handlePasswordLogin"
+            >
+              登录
+            </el-button>
+          </el-form-item>
 
-        <div class="login-method-switch">
-          <el-button link @click="currentStep = 1">返回</el-button>
-        </div>
-      </el-form>
-
-      <!-- 步骤3: 密码登录 -->
-      <el-form
-        v-else-if="currentStep === 3"
-        ref="passwordLoginFormRef"
-        :model="passwordLoginForm"
-        :rules="passwordLoginRules"
-        class="login-form"
-        autocomplete="off"
-      >
-        <el-form-item prop="phone">
-          <el-input
-            v-model="passwordLoginForm.phone"
-            placeholder="请输入手机号"
-            :prefix-icon="Iphone"
-            maxlength="11"
-            autocomplete="off"
-          />
-        </el-form-item>
-
-        <el-form-item prop="password">
-          <el-input
-            v-model="passwordLoginForm.password"
-            type="password"
-            placeholder="请输入密码"
-            :prefix-icon="Lock"
-            show-password
-            autocomplete="current-password"
-            @keyup.enter="handlePasswordLogin"
-          />
-        </el-form-item>
-
-        <el-form-item>
-          <el-button
-            type="primary"
-            class="login-btn"
-            :loading="loading"
-            @click="handlePasswordLogin"
-          >
-            登录
-          </el-button>
-        </el-form-item>
-
-        <div class="login-method-switch">
-          <span>没有账号？</span>
-          <el-button link @click="switchToCodeLogin">验证码登录</el-button>
-        </div>
-      </el-form>
+          <div class="login-method-switch">
+            <span>没有账号？</span>
+            <el-button link @click="switchToCodeLogin">验证码登录</el-button>
+          </div>
+        </el-form>
+      </Transition>
     </div>
   </div>
 </template>
@@ -207,7 +226,7 @@
 import { ref, reactive, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { InfoFilled, Iphone, Message, Lock } from '@element-plus/icons-vue'
+import { InfoFilled, Iphone, Message, Lock, ChatDotRound } from '@element-plus/icons-vue'
 import {
   sendVerificationCode,
   loginWithCode,
@@ -220,6 +239,7 @@ const router = useRouter()
 const loading = ref(false)
 const currentStep = ref(1)
 const countdown = ref(0)
+const stepTransition = ref('step-slide-left')
 let timer = null
 
 const phoneFormRef = ref()
@@ -318,7 +338,6 @@ const verifyPhone = async () => {
       passwordForm.phone = phoneForm.phone
       passwordForm.code = ''
 
-      // 获取 /user/me，v5.0 会返回 isNewUser
       const meRes = await getUserInfo()
       if (meRes.code !== 200) {
         ElMessage.error(meRes.message || '获取用户信息失败')
@@ -328,10 +347,9 @@ const verifyPhone = async () => {
       const userInfo = meRes.data
       localStorage.setItem('loginUser', JSON.stringify(userInfo))
 
-      // 新用户需要设置密码；老用户直接进入
       if (userInfo.isNewUser === true) {
+        stepTransition.value = 'step-slide-left'
         currentStep.value = 2
-        // 刚用掉的验证码还在 60 秒冷却期，冷却结束后用户再点“重新发送”
         sendCodeForPassword({ silent: true })
       } else {
         ElMessage.success('登录成功')
@@ -346,7 +364,6 @@ const verifyPhone = async () => {
   })
 }
 
-// 为设置密码重新发送验证码
 const sendCodeForPassword = async ({ silent = false } = {}) => {
   if (!passwordForm.phone) return
 
@@ -365,12 +382,10 @@ const sendCodeForPassword = async ({ silent = false } = {}) => {
     }
   } catch (error) {
     ElMessage.warning(error?.message || '验证码发送失败，请稍后重试')
-    // 后端返回“过于频繁”时同步一下倒计时，避免连续点击
     if (error?.message?.includes('频繁')) startCountdown()
   }
 }
 
-// 设置密码并进入
 const setPasswordAndLogin = async () => {
   if (!passwordFormRef.value) return
   await passwordFormRef.value.validate(async (valid) => {
@@ -382,7 +397,6 @@ const setPasswordAndLogin = async () => {
         ElMessage.error(res.message || '设置密码失败')
         return
       }
-      // 设置密码后后端会清除 isNewUser 标记，同步刷新本地用户信息
       try {
         const meRes = await getUserInfo()
         if (meRes.code === 200) {
@@ -402,7 +416,6 @@ const setPasswordAndLogin = async () => {
   })
 }
 
-// 密码登录
 const handlePasswordLogin = async () => {
   if (!passwordLoginFormRef.value) return
   await passwordLoginFormRef.value.validate(async (valid) => {
@@ -431,7 +444,6 @@ const handlePasswordLogin = async () => {
   })
 }
 
-// 发送验证码
 const sendCode = async () => {
   if (!phoneForm.phone) {
     ElMessage.warning('请输入手机号')
@@ -456,10 +468,12 @@ const sendCode = async () => {
 }
 
 const switchToPasswordLogin = () => {
+  stepTransition.value = 'step-slide-left'
   currentStep.value = 3
 }
 
 const switchToCodeLogin = () => {
+  stepTransition.value = 'step-slide-right'
   currentStep.value = 1
 }
 
@@ -477,30 +491,101 @@ onUnmounted(() => {
   align-items: center;
   justify-content: center;
   height: 100vh;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  width: 100%;
+  background: var(--bg-base);
+  position: relative;
+  overflow: hidden;
+}
+
+/* 背景渐变光斑 */
+.login-blob {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(90px);
+  opacity: 0.55;
+  pointer-events: none;
+}
+
+.login-blob-1 {
+  width: 480px;
+  height: 480px;
+  top: -120px;
+  left: -80px;
+  background: radial-gradient(circle, rgba(99, 102, 241, 0.4), transparent 60%);
+}
+
+.login-blob-2 {
+  width: 520px;
+  height: 520px;
+  bottom: -160px;
+  right: -100px;
+  background: radial-gradient(circle, rgba(139, 92, 246, 0.38), transparent 60%);
 }
 
 .login-box {
-  width: 420px;
-  padding: 40px;
-  background: #fff;
-  border-radius: 16px;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.15);
+  width: 440px;
+  max-width: 92vw;
+  padding: 44px 40px;
+  background: var(--glass-bg);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+  border: 1px solid var(--glass-border);
+  border-radius: 24px;
+  box-shadow: var(--shadow-lg);
+  position: relative;
+  z-index: 1;
+}
+
+.login-box-enter {
+  animation: loginBoxIn 0.6s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@keyframes loginBoxIn {
+  from {
+    opacity: 0;
+    transform: translateY(28px) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.login-logo {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 16px;
+}
+
+.login-logo :deep(.el-icon) {
+  animation: logoFloat 3s ease-in-out infinite;
+}
+
+@keyframes logoFloat {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-4px); }
 }
 
 .login-title {
   text-align: center;
-  margin-bottom: 32px;
-  font-size: 28px;
-  color: #303133;
-  font-weight: 600;
+  font-size: 30px;
+  font-weight: 700;
+  margin: 0 0 6px;
 }
 
+.login-subtitle {
+  text-align: center;
+  font-size: 14px;
+  color: var(--text-tertiary);
+  margin: 0 0 28px;
+}
+
+/* 步骤指示器 */
 .steps {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: center;
-  margin-bottom: 32px;
+  margin-bottom: 28px;
 }
 
 .step {
@@ -511,50 +596,56 @@ onUnmounted(() => {
 }
 
 .step-number {
-  width: 32px;
-  height: 32px;
+  width: 34px;
+  height: 34px;
   border-radius: 50%;
-  background: #e4e7ed;
-  color: #909399;
+  background: var(--bg-surface-soft);
+  border: 1.5px solid var(--border-subtle);
+  color: var(--text-tertiary);
   display: flex;
   align-items: center;
   justify-content: center;
   font-size: 14px;
-  font-weight: 500;
-  transition: all 0.3s;
+  font-weight: 600;
+  transition: all 0.35s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 .step.active .step-number {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: linear-gradient(135deg, var(--color-primary) 0%, #8b5cf6 100%);
+  border-color: transparent;
   color: #fff;
+  box-shadow: 0 4px 14px rgba(99, 102, 241, 0.4);
+  transform: scale(1.08);
 }
 
 .step.completed .step-number {
-  background: #67c23a;
+  background: var(--color-success);
+  border-color: transparent;
   color: #fff;
 }
 
 .step-text {
   font-size: 12px;
-  color: #909399;
+  color: var(--text-tertiary);
+  transition: color 0.3s;
 }
 
 .step.active .step-text {
-  color: #667eea;
-  font-weight: 500;
+  color: var(--color-primary);
+  font-weight: 600;
 }
 
 .step-line {
-  width: 60px;
+  width: 52px;
   height: 2px;
-  background: #e4e7ed;
+  background: var(--border-subtle);
   margin: 0 8px;
-  margin-bottom: 20px;
-  transition: all 0.3s;
+  margin-bottom: 24px;
+  transition: all 0.4s;
 }
 
 .step-line.active {
-  background: #67c23a;
+  background: var(--color-success);
 }
 
 .login-form {
@@ -563,13 +654,7 @@ onUnmounted(() => {
 
 .code-input-wrapper {
   display: flex;
-  gap: 12px;
-  width: 100%;
-}
-
-.code-input-wrapper :deep(.el-form-item__content) {
-  display: flex;
-  gap: 12px;
+  gap: 10px;
   width: 100%;
 }
 
@@ -581,48 +666,100 @@ onUnmounted(() => {
   white-space: nowrap;
   height: 40px;
   padding: 0 16px;
+  border-radius: 10px;
 }
 
 .login-btn {
   width: 100%;
-  height: 44px;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  height: 48px;
+  background: linear-gradient(135deg, var(--color-primary) 0%, #8b5cf6 100%);
   border: none;
   font-size: 16px;
-  font-weight: 500;
-  border-radius: 8px;
+  font-weight: 600;
+  border-radius: 12px;
+  box-shadow: 0 6px 20px rgba(99, 102, 241, 0.4);
+  transition: all 0.25s;
 }
 
-.login-btn:hover {
-  opacity: 0.9;
+.login-btn:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 10px 28px rgba(99, 102, 241, 0.55);
+}
+
+.login-btn:disabled {
+  opacity: 0.5;
+  box-shadow: none;
 }
 
 .step-tip {
   display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 12px 16px;
-  background: #f0f9ff;
-  border-radius: 8px;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 14px 16px;
+  background: rgba(var(--color-primary-rgb), 0.08);
+  border: 1px solid rgba(var(--color-primary-rgb), 0.2);
+  border-radius: 12px;
   margin-bottom: 20px;
-  color: #409eff;
+  color: var(--color-primary-strong);
   font-size: 14px;
 }
 
 .step-tip-sub {
   margin-top: 4px;
   font-size: 12px;
-  color: #909399;
+  color: var(--text-tertiary);
 }
 
 .login-method-switch {
   text-align: center;
-  margin-top: 20px;
+  margin-top: 18px;
   font-size: 14px;
-  color: #606266;
+  color: var(--text-secondary);
 }
 
 .login-method-switch .el-button {
   padding: 0;
+  color: var(--color-primary);
+  font-weight: 500;
+}
+
+/* 步骤切换过渡 */
+.step-slide-left-enter-active,
+.step-slide-left-leave-active,
+.step-slide-right-enter-active,
+.step-slide-right-leave-active {
+  transition: all 0.3s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.step-slide-left-enter-from {
+  opacity: 0;
+  transform: translateX(28px);
+}
+
+.step-slide-left-leave-to {
+  opacity: 0;
+  transform: translateX(-28px);
+}
+
+.step-slide-right-enter-from {
+  opacity: 0;
+  transform: translateX(-28px);
+}
+
+.step-slide-right-leave-to {
+  opacity: 0;
+  transform: translateX(28px);
+}
+
+/* 输入框样式跟随主题 */
+:deep(.el-input__wrapper) {
+  background: var(--bg-surface-soft) !important;
+  box-shadow: 0 0 0 1px var(--border-subtle) inset !important;
+  border-radius: 10px;
+  transition: all 0.2s;
+}
+
+:deep(.el-input__wrapper.is-focus) {
+  box-shadow: 0 0 0 2px var(--color-primary) inset !important;
 }
 </style>

@@ -1,14 +1,35 @@
 <template>
   <div class="settings-page">
     <div class="page-header">
-      <el-button text @click="router.push('/chat')">
+      <el-button class="back-btn" @click="router.push('/chat')">
         <el-icon><ArrowLeft /></el-icon>
         返回对话
       </el-button>
-      <h2>设置</h2>
+      <div class="title-block">
+        <h2>设置</h2>
+        <p class="subtitle">管理你的账户与服务配置</p>
+      </div>
     </div>
 
     <div class="settings-body">
+      <!-- 外观主题 -->
+      <el-card class="card">
+        <template #header>
+          <div class="card-header-row">
+            <span class="card-title">外观</span>
+            <el-switch
+              v-model="isDark"
+              active-text="深色"
+              inactive-text="浅色"
+              class="theme-switch"
+              :active-color="'var(--color-primary)'"
+            />
+          </div>
+        </template>
+        <p class="hint">切换界面主题，偏好会被保存在本地，下次打开自动沿用。</p>
+      </el-card>
+
+      <!-- 账户信息 -->
       <el-card v-loading="loading" class="card">
         <template #header>
           <span class="card-title">账户信息</span>
@@ -46,6 +67,7 @@
         </el-form>
       </el-card>
 
+      <!-- 服务信息 -->
       <el-card class="card">
         <template #header>
           <span class="card-title">服务信息</span>
@@ -60,6 +82,7 @@
         </p>
       </el-card>
 
+      <!-- 其他 -->
       <el-card class="card">
         <template #header>
           <span class="card-title">其他</span>
@@ -85,6 +108,7 @@ import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { ArrowLeft, Clock, SwitchButton } from '@element-plus/icons-vue'
 import { getUserInfo, updateProfile, logout } from '@/api/user'
+import { useTheme } from '@/composables/useTheme'
 
 const router = useRouter()
 
@@ -93,6 +117,8 @@ const name = ref('')
 const loading = ref(false)
 const saving = ref(false)
 const loggingOut = ref(false)
+
+const { isDark } = useTheme()
 
 const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || window.location.origin
 
@@ -183,22 +209,43 @@ onMounted(loadUser)
 .settings-page {
   height: 100%;
   overflow-y: auto;
-  background: #f5f7fa;
-  padding: 16px 24px 32px;
+  background: var(--bg-base);
+  padding: 24px;
   box-sizing: border-box;
 }
 
 .page-header {
   display: flex;
   align-items: center;
-  gap: 8px;
-  margin-bottom: 16px;
+  gap: 14px;
+  margin-bottom: 24px;
+  padding-bottom: 18px;
+  border-bottom: 1px solid var(--border-subtle);
 }
 
-.page-header h2 {
+.back-btn {
+  color: var(--text-secondary);
+  border-radius: 10px;
+  padding: 8px 12px;
+  transition: all 0.2s;
+}
+
+.back-btn:hover {
+  background: var(--bg-surface-soft);
+  color: var(--color-primary);
+}
+
+.title-block h2 {
   margin: 0;
-  font-size: 20px;
-  color: #303133;
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.title-block .subtitle {
+  margin: 4px 0 0;
+  font-size: 13px;
+  color: var(--text-tertiary);
 }
 
 .settings-body {
@@ -208,9 +255,28 @@ onMounted(loadUser)
   max-width: 720px;
 }
 
+.card {
+  background: var(--bg-surface) !important;
+  border: 1px solid var(--border-subtle) !important;
+  border-radius: 16px !important;
+  box-shadow: var(--shadow-sm);
+  overflow: hidden;
+}
+
+.card-header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
 .card-title {
   font-size: 15px;
   font-weight: 600;
+  color: var(--text-primary);
+}
+
+.theme-switch {
+  --el-switch-on-color: var(--color-primary);
 }
 
 .account {
@@ -221,8 +287,10 @@ onMounted(loadUser)
 }
 
 .account-avatar {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: linear-gradient(135deg, var(--color-primary) 0%, #8b5cf6 100%);
   font-size: 22px;
+  color: #fff;
+  box-shadow: 0 4px 14px rgba(99, 102, 241, 0.4);
 }
 
 .account-meta {
@@ -232,12 +300,13 @@ onMounted(loadUser)
 
 .account-name {
   font-size: 16px;
-  color: #303133;
+  font-weight: 600;
+  color: var(--text-primary);
 }
 
 .account-phone {
   font-size: 13px;
-  color: #909399;
+  color: var(--text-tertiary);
   margin-top: 4px;
 }
 
@@ -248,13 +317,59 @@ onMounted(loadUser)
 .hint {
   margin: 12px 0 0;
   font-size: 12px;
-  color: #909399;
+  color: var(--text-tertiary);
   line-height: 1.6;
+}
+
+.hint code {
+  background: var(--code-inline-bg);
+  color: var(--code-inline-text);
+  padding: 1px 5px;
+  border-radius: 4px;
+  font-size: 11px;
 }
 
 .actions {
   display: flex;
   flex-wrap: wrap;
   gap: 12px;
+}
+
+:deep(.el-card__header) {
+  padding: 16px 20px;
+}
+
+:deep(.el-card__body) {
+  padding: 20px;
+}
+
+:deep(.el-descriptions__label) {
+  color: var(--text-tertiary) !important;
+}
+
+:deep(.el-descriptions__content) {
+  color: var(--text-primary) !important;
+}
+
+:deep(.el-descriptions__cell) {
+  border-color: var(--border-subtle) !important;
+}
+
+:deep(.el-descriptions__title) {
+  color: var(--text-primary);
+}
+
+:deep(.el-descriptions) {
+  --el-descriptions-item-bordered-label-background: var(--bg-surface-soft);
+}
+
+:deep(.el-descriptions__body) {
+  background: var(--bg-surface);
+}
+
+@media (max-width: 768px) {
+  .settings-page {
+    padding: 18px;
+  }
 }
 </style>
