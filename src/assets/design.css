@@ -1,0 +1,128 @@
+/* ============================================================
+   Design Tokens —— LobeChat 风格的现代设计系统
+   浅色 / 深色双主题，通过 html[data-theme] 切换
+   ============================================================ */
+
+:root,
+html[data-theme='light'] {
+  /* 品牌色（紫→靛渐变主色） */
+  --color-primary: #6366f1;
+  --color-primary-soft: #818cf8;
+  --color-primary-strong: #4f46e5;
+  --color-primary-rgb: 99, 102, 241;
+
+  /* 背景 */
+  --bg-base: #f6f7f9;
+  --bg-surface: #ffffff;
+  --bg-surface-soft: #f4f5f7;
+  --bg-sidebar: linear-gradient(160deg, #171821 0%, #1e1f30 60%, #232440 100%);
+  --bg-header: rgba(255, 255, 255, 0.72);
+
+  /* 文本 */
+  --text-primary: #1d2033;
+  --text-secondary: #5b5f74;
+  --text-tertiary: #9298ad;
+  --text-inverse: #ffffff;
+  --text-sidebar: rgba(255, 255, 255, 0.92);
+  --text-sidebar-soft: rgba(255, 255, 255, 0.55);
+
+  /* 边框 */
+  --border-subtle: rgba(0, 0, 0, 0.06);
+  --border-strong: rgba(0, 0, 0, 0.12);
+  --border-sidebar: rgba(255, 255, 255, 0.08);
+
+  /* 气泡 */
+  --bubble-user-bg: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+  --bubble-user-text: #ffffff;
+  --bubble-ai-bg: var(--bg-surface);
+  --bubble-ai-text: var(--text-primary);
+  --bubble-ai-border: var(--border-subtle);
+  --bubble-ai-shadow: 0 1px 2px rgba(16, 24, 40, 0.04), 0 4px 16px rgba(16, 24, 40, 0.06);
+
+  /* 代码块 */
+  --code-bg: #1e1f2e;
+  --code-text: #e4e6f1;
+  --code-inline-bg: rgba(99, 102, 241, 0.12);
+  --code-inline-text: #4f46e5;
+
+  /* 阴影 */
+  --shadow-sm: 0 1px 2px rgba(16, 24, 40, 0.06);
+  --shadow-md: 0 4px 16px rgba(16, 24, 40, 0.08);
+  --shadow-lg: 0 12px 40px rgba(16, 24, 40, 0.16);
+  --shadow-glow: 0 0 0 1px rgba(99, 102, 241, 0.18), 0 8px 32px rgba(99, 102, 241, 0.28);
+
+  /* 圆角 */
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 20px;
+  --radius-full: 9999px;
+
+  /* 玻璃拟态 */
+  --glass-bg: rgba(255, 255, 255, 0.6);
+  --glass-border: rgba(255, 255, 255, 0.7);
+  --glass-blur: blur(16px) saturate(160%);
+
+  /* 强调/语义 */
+  --color-success: #22c55e;
+  --color-warning: #f59e0b;
+  --color-danger: #ef4444;
+  --color-info: #38bdf8;
+
+  /* 装饰渐变（背景光斑） */
+  --decor-blob-1: radial-gradient(circle at 20% 20%, rgba(99, 102, 241, 0.18), transparent 45%);
+  --decor-blob-2: radial-gradient(circle at 80% 80%, rgba(168, 85, 247, 0.16), transparent 45%);
+
+  /* 滚动条 */
+  --scrollbar-thumb: rgba(0, 0, 0, 0.18);
+}
+
+html[data-theme='dark'] {
+  --color-primary: #818cf8;
+  --color-primary-soft: #a5b4fc;
+  --color-primary-strong: #6366f1;
+  --color-primary-rgb: 129, 140, 248;
+
+  --bg-base: #0c0d12;
+  --bg-surface: #16171f;
+  --bg-surface-soft: #1b1d28;
+  --bg-sidebar: linear-gradient(160deg, #0c0d14 0%, #14151f 60%, #191a2b 100%);
+  --bg-header: rgba(12, 13, 18, 0.7);
+
+  --text-primary: #f1f2f7;
+  --text-secondary: #a3a7ba;
+  --text-tertiary: #6a6e82;
+  --text-inverse: #0c0d12;
+  --text-sidebar: rgba(255, 255, 255, 0.92);
+  --text-sidebar-soft: rgba(255, 255, 255, 0.5);
+
+  --border-subtle: rgba(255, 255, 255, 0.08);
+  --border-strong: rgba(255, 255, 255, 0.16);
+  --border-sidebar: rgba(255, 255, 255, 0.08);
+
+  --bubble-user-bg: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+  --bubble-user-text: #ffffff;
+  --bubble-ai-bg: #1b1d28;
+  --bubble-ai-text: #f1f2f7;
+  --bubble-ai-border: rgba(255, 255, 255, 0.06);
+  --bubble-ai-shadow: 0 2px 12px rgba(0, 0, 0, 0.4);
+
+  --code-bg: #0a0b10;
+  --code-text: #e4e6f1;
+  --code-inline-bg: rgba(129, 140, 248, 0.16);
+  --code-inline-text: #a5b4fc;
+
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.5);
+  --shadow-lg: 0 12px 40px rgba(0, 0, 0, 0.6);
+  --shadow-glow: 0 0 0 1px rgba(129, 140, 248, 0.24), 0 8px 32px rgba(129, 140, 248, 0.32);
+
+  --glass-bg: rgba(22, 23, 31, 0.6);
+  --glass-border: rgba(255, 255, 255, 0.08);
+  --glass-blur: blur(16px) saturate(140%);
+
+  --decor-blob-1: radial-gradient(circle at 20% 20%, rgba(99, 102, 241, 0.28), transparent 45%);
+  --decor-blob-2: radial-gradient(circle at 80% 80%, rgba(168, 85, 247, 0.24), transparent 45%);
+
+  --scrollbar-thumb: rgba(255, 255, 255, 0.18);
+}

@@ -1,5 +1,7 @@
 <template>
   <div class="chat-container">
+    <div class="decor-blob decor-1"></div>
+    <div class="decor-blob decor-2"></div>
     <!-- 侧边栏遮罩（移动端） -->
     <div v-if="isMobile && sidebarVisible" class="sidebar-mask" @click="closeSidebar"></div>
     
@@ -7,7 +9,7 @@
     <aside class="sidebar" :class="{ show: sidebarVisible }">
       <div class="sidebar-header">
         <div class="logo">
-          <el-icon :size="24" color="#667eea"><ChatDotRound /></el-icon>
+          <el-icon :size="24" color="var(--color-primary-soft)"><ChatDotRound /></el-icon>
           <span>AI 助手</span>
         </div>
         <el-button class="new-chat-btn" @click="newChat">
@@ -31,7 +33,10 @@
           @contextmenu.prevent="showContextMenu($event, session)"
         >
           <el-icon class="chat-icon"><ChatDotRound /></el-icon>
-          <span class="chat-title" v-if="editingSessionId !== session.sessionId">{{ session.title }}</span>
+          <div class="chat-title-wrap">
+            <span class="chat-title" v-if="editingSessionId !== session.sessionId">{{ session.title }}</span>
+            <span v-if="session.model" class="session-model-tag" :title="'锁定模型：' + session.model">{{ session.model }}</span>
+          </div>
           
           <!-- 编辑输入框 -->
           <div v-if="editingSessionId === session.sessionId" class="edit-box" @click.stop>
@@ -91,6 +96,10 @@
           <el-button v-if="isMobile" size="small" circle class="mobile-delete-btn" @click="deleteChat(currentChatId)" title="删除当前对话">
             <el-icon><Delete /></el-icon>
           </el-button>
+          <!-- 主题切换 -->
+          <el-button size="small" :title="isDark ? '切换为浅色' : '切换为深色'" @click="toggle">
+            <el-icon><Sunny v-if="isDark" /><Moon v-else /></el-icon>
+          </el-button>
           <!-- 历史 / 设置入口 -->
           <el-button size="small" title="历史记录" @click="router.push('/history')">
             <el-icon><Clock /></el-icon>
@@ -129,7 +138,7 @@
         <!-- 空状态 -->
         <div v-else-if="messages.length === 0" class="empty-state">
           <div class="empty-icon">
-            <el-icon :size="80" color="#667eea"><ChatDotRound /></el-icon>
+            <el-icon :size="80" color="var(--color-primary)"><ChatDotRound /></el-icon>
           </div>
           <h2>你好，有什么可以帮你的？</h2>
           <p>我可以帮你回答问题、写代码、翻译文本等</p>
@@ -149,40 +158,48 @@
         </div>
 
         <!-- 消息列表 -->
-        <div v-else>
-          <!-- 加载更早历史提示（滚到顶部触发） -->
-          <div v-if="isLoadingOlder" class="load-older-tip">
-            <el-icon class="loading-icon" :size="18"><Loading /></el-icon>
-            <span>加载更早的消息...</span>
-          </div>
-          <div
-            v-for="msg in messages"
-            :key="msg.id"
-            :class="['message', msg.role === 'user' ? 'user-message' : 'ai-message']"
-          >
-            <el-avatar :size="40" :class="msg.role === 'user' ? 'user-avatar' : 'ai-avatar'">
-              <el-icon v-if="msg.role === 'ai'"><ChatDotRound /></el-icon>
-              <span v-else>我</span>
-            </el-avatar>
-            <div class="message-content">
-              <div class="message-header">
-                <span class="sender-name">{{ msg.role === 'user' ? '你' : 'AI 助手' }}</span>
-                <span v-if="msg.timestamp" class="message-time">{{ formatTime(msg.timestamp) }}</span>
-              </div>
-              <div class="message-bubble">
-                <div v-if="msg.role === 'ai' && !msg.streaming" class="markdown-body" v-html="msg.html"></div>
-                <p v-else-if="msg.role === 'ai' && msg.streaming" class="streaming-text">{{ msg.content || '思考中...' }}</p>
-                <p v-else>{{ msg.content }}</p>
-              </div>
-              <div class="message-actions" v-if="msg.role === 'ai'">
-                <el-button text size="small" @click="copyMessage(msg.content)">
-                  <el-icon><CopyDocument /></el-icon>
-                  复制
-                </el-button>
-              </div>
+        <AnimatePresence v-else>
+          <div class="messages-stack">
+            <!-- 加载更早历史提示（滚到顶部触发） -->
+            <div v-if="isLoadingOlder" class="load-older-tip">
+              <el-icon class="loading-icon" :size="18"><Loading /></el-icon>
+              <span>加载更早的消息...</span>
             </div>
+            <motion.div
+              v-for="msg in messages"
+              :key="msg.id"
+              :class="['message', msg.role === 'user' ? 'user-message' : 'ai-message']"
+              initial="hidden"
+              :animate="msg.role === 'ai' && msg.streaming ? 'streaming' : 'shown'"
+              :variants="messageVariants"
+            >
+              <el-avatar :size="40" :class="msg.role === 'user' ? 'user-avatar' : 'ai-avatar'">
+                <el-icon v-if="msg.role === 'ai'"><ChatDotRound /></el-icon>
+                <span v-else>我</span>
+              </el-avatar>
+              <div class="message-content">
+                <div class="message-header">
+                  <span class="sender-name">{{ msg.role === 'user' ? '你' : 'AI 助手' }}</span>
+                  <span v-if="msg.timestamp" class="message-time">{{ formatTime(msg.timestamp) }}</span>
+                </div>
+                <div class="message-bubble">
+                  <StreamingMarkdown
+                    v-if="msg.role === 'ai'"
+                    :content="msg.content"
+                    :streaming="!!msg.streaming"
+                  />
+                  <p v-else class="plain-text">{{ msg.content }}</p>
+                </div>
+                <div class="message-actions" v-if="msg.role === 'ai' && !msg.streaming">
+                  <el-button text size="small" @click="copyMessage(msg.content)">
+                    <el-icon><CopyDocument /></el-icon>
+                    复制
+                  </el-button>
+                </div>
+              </div>
+            </motion.div>
           </div>
-        </div>
+        </AnimatePresence>
       </div>
 
       <!-- 滚回底部按钮 -->
@@ -199,7 +216,8 @@
           <el-select
             v-model="selectedModel"
             :teleported="false"
-            placeholder="默认模型"
+            :placeholder="modelLocked ? '已锁定' : '默认模型'"
+            :disabled="modelLocked"
             class="model-select"
             size="small"
           >
@@ -210,7 +228,7 @@
               :value="m"
             />
           </el-select>
-          <span class="model-hint">模型</span>
+          <span class="model-hint" :class="{ locked: modelLocked }">{{ modelLocked ? '会话已锁定，换模型请新建会话' : '模型' }}</span>
         </div>
         <div class="input-wrapper">
           <el-input
@@ -263,9 +281,14 @@ import {
 import { sendMessageStream, getSessions, getHistory, updateTitle, clearSession, getModels } from '@/api/chat'
 import { getUserInfo, logout } from '@/api/user'
 import { renderMarkdown, enhanceCodeBlocks, exportChatAsJSON, exportChatAsText, copyText } from '@/utils/markdown'
+import StreamingMarkdown from '@/components/StreamingMarkdown.vue'
+import { useTheme } from '@/composables/useTheme'
+import { AnimatePresence, motion } from 'motion-v'
+import { Moon, Sunny } from '@element-plus/icons-vue'
 
 const router = useRouter()
 const inputMessage = ref('')
+const { isDark, toggle } = useTheme()
 const messages = ref([])
 const isTyping = ref(false)
 const messageContainer = ref(null)
@@ -290,6 +313,9 @@ const userInfo = ref(null)
 const modelOptions = ref([])
 const selectedModel = ref('')
 const showModelSelector = computed(() => modelOptions.value.length >= 2)
+// 会话锁模型：当前会话已锁定的模型（null 表示未锁定/新会话）
+const currentSessionModel = ref(null)
+const modelLocked = computed(() => !!currentSessionModel.value)
 
 const quickQuestions = ref([
   '帮我写一段 Python 代码',
@@ -303,6 +329,19 @@ const currentSession = computed(() => {
 })
 
 const isMobile = computed(() => windowWidth.value <= 768)
+
+// motion-vue 消息入场/退场动画
+const messageVariants = {
+  hidden: { opacity: 0, y: 12, scale: 0.98 },
+  shown: {
+    opacity: 1, y: 0, scale: 1,
+    transition: { duration: 0.32, ease: [0.22, 1, 0.36, 1] }
+  },
+  streaming: {
+    opacity: 1, y: 0, scale: 1,
+    transition: { duration: 0.2, ease: 'easeOut' }
+  }
+}
 
 const onResize = () => {
   windowWidth.value = window.innerWidth
@@ -415,6 +454,8 @@ const loadSessions = async () => {
     const res = await getSessions()
     if (res.code === 200) {
       chatSessions.value = res.data || []
+      // 会话列表刷新后，同步当前会话锁定的模型（可能新会话刚锁定模型）
+      if (currentChatId.value) syncSessionModel(currentChatId.value)
     }
   } catch (e) {
     console.error('加载会话列表失败', e)
@@ -661,7 +702,11 @@ const handleSend = async () => {
           cancelAnimationFrame(streamRAF)
           streamRAF = null
         }
-        if (error?.message) {
+        if (error?.code === 409) {
+          // 会话锁模型冲突：同步锁定模型并引导新建会话
+          syncSessionModel(currentChatId.value)
+          ElMessage.warning(error.message || '该会话已锁定模型，要切换请新建会话')
+        } else if (error?.message) {
           ElMessage.error(error.message)
         } else {
           ElMessage.error('发送失败，请稍后重试')
@@ -680,7 +725,12 @@ const handleSend = async () => {
       cancelAnimationFrame(streamRAF)
       streamRAF = null
     }
-    ElMessage.error('发送失败，请稍后重试')
+    if (e?.code === 409) {
+      syncSessionModel(currentChatId.value)
+      ElMessage.warning(e.message || '该会话已锁定模型，要切换请新建会话')
+    } else {
+      ElMessage.error(e?.message || '发送失败，请稍后重试')
+    }
     messages.value = messages.value.filter(m => m !== aiMsg)
   }
 }
@@ -737,6 +787,7 @@ const newChat = async () => {
   const newId = generateSessionId()
   currentChatId.value = newId
   messages.value = []
+  currentSessionModel.value = null
   sidebarVisible.value = false
   router.push(`/chat/${newId}`)
   await nextTick()
@@ -750,7 +801,20 @@ const selectChat = async (id) => {
   currentChatId.value = id
   sidebarVisible.value = false
   router.push(`/chat/${id}`)
+  syncSessionModel(id)
   await loadMessages()
+}
+
+// 同步当前会话锁定的模型到 UI（下拉框禁用 + 侧边栏展示）
+const syncSessionModel = (sessionId) => {
+  const session = chatSessions.value.find(s => s.sessionId === sessionId)
+  if (session && session.model) {
+    currentSessionModel.value = session.model
+    selectedModel.value = session.model
+  } else {
+    currentSessionModel.value = null
+    selectedModel.value = ''
+  }
 }
 
 const toggleSidebar = () => {
@@ -879,103 +943,171 @@ const handleLogout = async () => {
   display: flex;
   height: 100%;
   width: 100%;
-  background: #f5f7fa;
+  background: var(--bg-base);
   position: relative;
+  overflow: hidden;
+}
+
+/* 背景装饰光斑（LobeChat 式氛围） */
+.decor-blob {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(80px);
+  opacity: 0.5;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.decor-1 {
+  width: 420px;
+  height: 420px;
+  top: -120px;
+  left: 220px;
+  background: var(--decor-blob-1);
+}
+
+.decor-2 {
+  width: 480px;
+  height: 480px;
+  bottom: -160px;
+  right: -120px;
+  background: var(--decor-blob-2);
 }
 
 /* ========== 侧边栏 ========== */
 .sidebar {
-  width: 260px;
-  background: #1a1a2e;
+  width: 272px;
+  background: var(--bg-sidebar);
   display: flex;
   flex-direction: column;
-  transition: transform 0.3s ease;
+  transition: transform 0.32s cubic-bezier(0.22, 1, 0.36, 1);
   z-index: 100;
   position: relative;
+  box-shadow: 4px 0 24px rgba(0, 0, 0, 0.12);
 }
 
 .sidebar-header {
-  padding: 16px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  padding: 18px 16px 14px;
+  border-bottom: 1px solid var(--border-sidebar);
 }
 
 .logo {
   display: flex;
   align-items: center;
   gap: 10px;
-  font-size: 18px;
+  font-size: 17px;
   font-weight: 600;
-  color: #fff;
+  color: var(--text-sidebar);
   margin-bottom: 16px;
+  letter-spacing: 0.3px;
 }
 
 .new-chat-btn {
   width: 100%;
-  height: 40px;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  height: 42px;
+  background: linear-gradient(135deg, var(--color-primary) 0%, #8b5cf6 100%);
   border: none;
   color: #fff;
   font-size: 14px;
-  border-radius: 8px;
+  font-weight: 500;
+  border-radius: 10px;
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 8px;
   cursor: pointer;
   transition: all 0.2s;
+  box-shadow: 0 4px 14px rgba(99, 102, 241, 0.35);
 }
 
 .new-chat-btn:hover {
-  opacity: 0.9;
+  opacity: 0.92;
   transform: translateY(-1px);
+  box-shadow: 0 6px 20px rgba(99, 102, 241, 0.45);
 }
 
 .chat-list {
   flex: 1;
   overflow-y: auto;
-  padding: 8px;
+  padding: 10px 10px 16px;
 }
 
 .empty-sessions {
   text-align: center;
-  padding: 40px 16px;
-  color: rgba(255, 255, 255, 0.5);
-  font-size: 14px;
+  padding: 48px 16px;
+  color: var(--text-sidebar-soft);
+  font-size: 13px;
 }
 
 .chat-item {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 12px;
-  border-radius: 8px;
+  padding: 11px 12px;
+  border-radius: 10px;
   cursor: pointer;
-  transition: all 0.2s;
+  transition: all 0.18s ease;
   position: relative;
   margin-bottom: 4px;
+  border: 1px solid transparent;
 }
 
 .chat-item:hover {
-  background: rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.08);
 }
 
 .chat-item.active {
-  background: rgba(102, 126, 234, 0.3);
-  border: 1px solid rgba(102, 126, 234, 0.5);
+  background: rgba(99, 102, 241, 0.22);
+  border-color: rgba(129, 140, 248, 0.4);
+  box-shadow: inset 0 0 0 1px rgba(129, 140, 248, 0.15);
 }
 
 .chat-icon {
-  color: rgba(255, 255, 255, 0.7);
+  color: var(--text-sidebar-soft);
   flex-shrink: 0;
+  font-size: 16px;
+}
+
+.chat-item.active .chat-icon {
+  color: var(--color-primary-soft);
 }
 
 .chat-title {
-  flex: 1;
   font-size: 14px;
-  color: rgba(255, 255, 255, 0.9);
+  color: var(--text-sidebar);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  font-weight: 400;
+}
+
+.chat-title-wrap {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.chat-title-wrap .chat-title {
+  flex: 0 1 auto;
+  min-width: 0;
+}
+
+.session-model-tag {
+  align-self: flex-start;
+  font-size: 10px;
+  line-height: 1.4;
+  padding: 1px 7px;
+  border-radius: 20px;
+  background: rgba(99, 102, 241, 0.28);
+  color: rgba(255, 255, 255, 0.9);
+  border: 1px solid rgba(129, 140, 248, 0.4);
+  max-width: 150px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 500;
 }
 
 .more-btn {
@@ -984,7 +1116,7 @@ const handleLogout = async () => {
   height: 28px;
   border: none;
   background: rgba(255, 255, 255, 0.1);
-  color: rgba(255, 255, 255, 0.7);
+  color: var(--text-sidebar-soft);
   border-radius: 50%;
   display: flex;
   align-items: center;
@@ -999,7 +1131,7 @@ const handleLogout = async () => {
 }
 
 .more-btn:hover {
-  background: rgba(255, 255, 255, 0.2);
+  background: rgba(255, 255, 255, 0.22);
   color: #fff;
 }
 
@@ -1008,12 +1140,14 @@ const handleLogout = async () => {
   right: 36px;
   top: 50%;
   transform: translateY(-50%);
-  background: #2a2a4a;
-  border-radius: 8px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  background: var(--bg-surface-soft);
+  border: 1px solid var(--border-subtle);
+  border-radius: 10px;
+  box-shadow: var(--shadow-lg);
   padding: 4px;
   z-index: 10;
-  min-width: 100px;
+  min-width: 110px;
+  backdrop-filter: var(--glass-blur);
 }
 
 .context-menu-item {
@@ -1022,20 +1156,20 @@ const handleLogout = async () => {
   gap: 8px;
   padding: 8px 12px;
   font-size: 13px;
-  color: rgba(255, 255, 255, 0.8);
-  border-radius: 4px;
+  color: var(--text-secondary);
+  border-radius: 6px;
   cursor: pointer;
-  transition: all 0.2s;
+  transition: all 0.15s;
 }
 
 .context-menu-item:hover {
-  background: rgba(255, 255, 255, 0.1);
-  color: #fff;
+  background: rgba(99, 102, 241, 0.1);
+  color: var(--color-primary);
 }
 
 .context-menu-item.delete:hover {
-  background: rgba(245, 108, 108, 0.2);
-  color: #f56c6c;
+  background: rgba(239, 68, 68, 0.12);
+  color: var(--color-danger);
 }
 
 .edit-box {
@@ -1047,21 +1181,23 @@ const handleLogout = async () => {
 
 .edit-input {
   flex: 1;
-  background: transparent;
-  border: none;
+  background: rgba(255, 255, 255, 0.12);
+  border: 1px solid rgba(255, 255, 255, 0.2);
   outline: none;
   color: #fff;
-  font-size: 14px;
+  font-size: 13px;
   min-width: 0;
+  padding: 4px 8px;
+  border-radius: 6px;
 }
 
-.edit-input::placeholder {
-  color: rgba(255, 255, 255, 0.5);
+.edit-input:focus {
+  border-color: var(--color-primary-soft);
 }
 
 .title-limit-tip {
   font-size: 12px;
-  color: rgba(255, 255, 255, 0.7);
+  color: var(--text-sidebar-soft);
   flex-shrink: 0;
 }
 
@@ -1080,23 +1216,23 @@ const handleLogout = async () => {
 }
 
 .save-btn {
-  background: rgba(103, 194, 58, 0.2);
-  color: #67c23a;
+  background: rgba(34, 197, 94, 0.25);
+  color: var(--color-success);
 }
 
 .save-btn:hover {
-  background: #67c23a;
-  color: white;
+  background: var(--color-success);
+  color: #fff;
 }
 
 .cancel-btn {
-  background: rgba(245, 108, 108, 0.2);
-  color: #f56c6c;
+  background: rgba(239, 68, 68, 0.25);
+  color: var(--color-danger);
 }
 
 .cancel-btn:hover {
-  background: #f56c6c;
-  color: white;
+  background: var(--color-danger);
+  color: #fff;
 }
 
 .save-btn .el-icon, .cancel-btn .el-icon {
@@ -1108,18 +1244,23 @@ const handleLogout = async () => {
   flex: 1;
   display: flex;
   flex-direction: column;
-  background: #f5f7fa;
+  background: transparent;
   min-width: 0;
+  position: relative;
+  z-index: 1;
 }
 
 .chat-header {
-  height: 56px;
-  background: white;
-  border-bottom: 1px solid #ebeef5;
+  height: 60px;
+  background: var(--bg-header);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+  border-bottom: 1px solid var(--border-subtle);
   display: flex;
   align-items: center;
-  padding: 0 16px;
+  padding: 0 20px;
   gap: 12px;
+  z-index: 5;
 }
 
 .menu-btn {
@@ -1128,14 +1269,18 @@ const handleLogout = async () => {
 
 .header-title {
   font-size: 16px;
-  font-weight: 500;
-  color: #303133;
+  font-weight: 600;
+  color: var(--text-primary);
   flex: 1;
+  letter-spacing: 0.2px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .header-actions {
   display: flex;
-  gap: 8px;
+  gap: 6px;
   align-items: center;
 }
 
@@ -1143,14 +1288,15 @@ const handleLogout = async () => {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 4px 8px;
+  padding: 4px 10px;
   border-radius: 20px;
-  background: #f5f7fa;
+  background: var(--bg-surface-soft);
+  border: 1px solid var(--border-subtle);
 }
 
 .user-name {
   font-size: 13px;
-  color: #606266;
+  color: var(--text-secondary);
   max-width: 100px;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1161,10 +1307,10 @@ const handleLogout = async () => {
 .chat-messages {
   flex: 1;
   overflow-y: auto;
-  padding: 24px;
+  padding: 28px 24px;
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  gap: 22px;
   min-height: 0;
 }
 
@@ -1175,11 +1321,12 @@ const handleLogout = async () => {
   align-items: center;
   justify-content: center;
   gap: 16px;
-  color: #909399;
+  color: var(--text-tertiary);
 }
 
 .loading-icon {
   animation: rotate 1s linear infinite;
+  color: var(--color-primary);
 }
 
 @keyframes rotate {
@@ -1193,11 +1340,12 @@ const handleLogout = async () => {
   align-items: center;
   gap: 8px;
   font-size: 13px;
-  color: #909399;
+  color: var(--text-tertiary);
   padding: 8px 16px;
-  background: #fff;
+  background: var(--bg-surface);
   border-radius: 20px;
-  border: 1px solid #ebeef5;
+  border: 1px solid var(--border-subtle);
+  box-shadow: var(--shadow-sm);
 }
 
 .empty-state {
@@ -1206,23 +1354,36 @@ const handleLogout = async () => {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 16px;
-  color: #909399;
+  gap: 14px;
+  color: var(--text-tertiary);
+  animation: emptyFadeIn 0.5s ease;
+}
+
+@keyframes emptyFadeIn {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 
 .empty-icon {
-  opacity: 0.3;
+  opacity: 0.9;
+  filter: drop-shadow(0 8px 24px rgba(99, 102, 241, 0.35));
 }
 
 .empty-state h2 {
-  font-size: 24px;
-  color: #303133;
+  font-size: 26px;
+  font-weight: 700;
+  background: linear-gradient(100deg, var(--color-primary) 0%, #8b5cf6 60%, var(--color-primary-soft) 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
   margin: 0;
+  letter-spacing: 0.5px;
 }
 
 .empty-state p {
   font-size: 14px;
   margin: 0;
+  color: var(--text-tertiary);
 }
 
 .quick-questions {
@@ -1230,44 +1391,47 @@ const handleLogout = async () => {
   flex-wrap: wrap;
   gap: 10px;
   justify-content: center;
-  max-width: 600px;
+  max-width: 580px;
+  margin-top: 8px;
 }
 
 .quick-question {
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 10px 16px;
-  background: white;
-  border: 1px solid #e4e7ed;
-  border-radius: 20px;
-  font-size: 13px;
-  color: #606266;
+  gap: 8px;
+  padding: 11px 18px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: 14px;
+  font-size: 13.5px;
+  color: var(--text-secondary);
   cursor: pointer;
-  transition: all 0.2s;
+  transition: all 0.2s ease;
+  box-shadow: var(--shadow-sm);
 }
 
 .quick-question:hover {
-  background: #f5f7fa;
-  border-color: #667eea;
-  color: #667eea;
+  border-color: var(--color-primary-soft);
+  color: var(--color-primary);
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-glow);
 }
 
 .message {
   display: flex;
   gap: 12px;
-  max-width: 85%;
-  animation: fadeIn 0.3s ease;
+  max-width: 82%;
+  animation: messageIn 0.4s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
-@keyframes fadeIn {
+@keyframes messageIn {
   from {
     opacity: 0;
-    transform: translateY(10px);
+    transform: translateY(14px) scale(0.98);
   }
   to {
     opacity: 1;
-    transform: translateY(0);
+    transform: translateY(0) scale(1);
   }
 }
 
@@ -1285,17 +1449,19 @@ const handleLogout = async () => {
 }
 
 .user-avatar {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: linear-gradient(135deg, var(--color-primary) 0%, #8b5cf6 100%);
+  box-shadow: 0 4px 14px rgba(99, 102, 241, 0.4);
 }
 
 .ai-avatar {
   background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+  box-shadow: 0 4px 14px rgba(245, 87, 108, 0.3);
 }
 
 .message-content {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 5px;
   min-width: 0;
 }
 
@@ -1304,7 +1470,7 @@ const handleLogout = async () => {
   align-items: center;
   gap: 8px;
   font-size: 12px;
-  color: #909399;
+  color: var(--text-tertiary);
 }
 
 .user-message .message-header {
@@ -1312,35 +1478,44 @@ const handleLogout = async () => {
 }
 
 .sender-name {
-  font-weight: 500;
+  font-weight: 600;
+  color: var(--text-secondary);
 }
 
 .message-bubble {
-  padding: 12px 16px;
-  border-radius: 12px;
-  font-size: 14px;
-  line-height: 1.6;
+  padding: 14px 18px;
+  border-radius: var(--radius-lg);
+  font-size: 15px;
+  line-height: 1.65;
   word-break: break-word;
   position: relative;
 }
 
 .user-message .message-bubble {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  color: white;
-  border-radius: 12px 12px 4px 12px;
+  background: var(--bubble-user-bg);
+  color: var(--bubble-user-text);
+  border-radius: 18px 18px 6px 18px;
+  box-shadow: 0 4px 16px rgba(99, 102, 241, 0.35);
 }
 
 .ai-message .message-bubble {
-  background: white;
-  color: #303133;
-  border: 1px solid #e4e7ed;
-  border-radius: 12px 12px 12px 4px;
+  background: var(--bubble-ai-bg);
+  color: var(--bubble-ai-text);
+  border: 1px solid var(--bubble-ai-border);
+  border-radius: 18px 18px 18px 6px;
+  box-shadow: var(--bubble-ai-shadow);
+}
+
+.plain-text {
+  margin: 0;
+  white-space: pre-wrap;
+  line-height: 1.6;
 }
 
 .streaming-text {
   margin: 0;
   white-space: pre-wrap;
-  line-height: 1.6;
+  line-height: 1.7;
   word-break: break-word;
 }
 
@@ -1359,38 +1534,45 @@ const handleLogout = async () => {
 
 /* 滚动回底部按钮 */
 .scroll-bottom-btn {
-  position: fixed;
-  bottom: 100px;
+  position: absolute;
+  bottom: 112px;
   right: 40px;
-  width: 40px;
-  height: 40px;
+  width: 42px;
+  height: 42px;
   border-radius: 50%;
-  background: white;
-  border: 1px solid #e4e7ed;
-  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.1);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  box-shadow: var(--shadow-md);
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
   transition: all 0.3s;
-  z-index: 10;
+  z-index: 6;
+  color: var(--color-primary);
 }
 
 .scroll-bottom-btn:hover {
-  background: #667eea;
+  background: var(--color-primary);
   color: white;
-  border-color: #667eea;
+  border-color: var(--color-primary);
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-glow);
 }
 
 /* 输入区域 */
 .chat-input {
-  padding: 16px 24px;
-  background: white;
-  border-top: 1px solid #ebeef5;
+  padding: 18px 24px 20px;
+  background: var(--bg-header);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+  border-top: 1px solid var(--border-subtle);
   display: flex;
   gap: 12px;
   align-items: flex-end;
   flex-wrap: wrap;
+  position: relative;
+  z-index: 5;
 }
 
 /* 模型选择器 */
@@ -1407,8 +1589,12 @@ const handleLogout = async () => {
 
 .model-hint {
   font-size: 12px;
-  color: #909399;
+  color: var(--text-tertiary);
   flex-shrink: 0;
+}
+
+.model-hint.locked {
+  color: var(--color-warning);
 }
 
 .input-wrapper {
@@ -1416,9 +1602,20 @@ const handleLogout = async () => {
 }
 
 .message-input {
-  background: #f5f7fa !important;
-  border: none !important;
-  border-radius: 12px !important;
+  background: var(--bg-surface-soft) !important;
+  border: 1px solid var(--border-subtle) !important;
+  border-radius: var(--radius-lg) !important;
+  transition: all 0.25s ease;
+}
+
+.message-input:hover {
+  border-color: var(--border-strong) !important;
+}
+
+.message-input:focus-within {
+  border-color: var(--color-primary) !important;
+  box-shadow: var(--shadow-glow);
+  background: var(--bg-surface) !important;
 }
 
 .message-input :deep(.el-textarea__inner) {
@@ -1426,71 +1623,58 @@ const handleLogout = async () => {
   border: none !important;
   box-shadow: none !important;
   resize: none;
-  padding: 12px;
+  padding: 14px 16px;
+  color: var(--text-primary);
 }
 
 .input-limit-tip {
   margin-top: 6px;
   font-size: 12px;
-  color: #f56c6c;
+  color: var(--color-danger);
 }
 
 .send-btn, .stop-btn {
   height: 44px;
-  padding: 0 20px;
-  border-radius: 12px;
+  padding: 0 22px;
+  border-radius: var(--radius-md);
   font-weight: 500;
+  transition: all 0.2s;
 }
 
 .send-btn {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: linear-gradient(135deg, var(--color-primary) 0%, #8b5cf6 100%);
   border: none;
+  box-shadow: 0 4px 16px rgba(99, 102, 241, 0.4);
 }
 
 .send-btn:hover:not(:disabled) {
-  opacity: 0.9;
+  transform: translateY(-1px);
+  box-shadow: 0 6px 22px rgba(99, 102, 241, 0.55);
 }
 
-/* Markdown 样式 */
-.markdown-body {
-  font-size: 14px;
-  line-height: 1.6;
+.send-btn:disabled {
+  opacity: 0.5;
+  box-shadow: none;
 }
 
-.markdown-body p {
-  margin: 0 0 8px 0;
+.stop-btn {
+  background: linear-gradient(135deg, #ef4444 0%, #f97316 100%);
+  border: none;
+  color: #fff;
+  box-shadow: 0 4px 16px rgba(239, 68, 68, 0.4);
 }
 
-.markdown-body p:last-child {
-  margin-bottom: 0;
-}
-
-.markdown-body pre {
-  background: #f5f7fa;
-  border-radius: 8px;
-  padding: 12px;
-  overflow-x: auto;
-  margin: 8px 0;
-  position: relative;
-}
-
-.markdown-body code {
-  font-family: 'Consolas', 'Monaco', monospace;
-  font-size: 13px;
-}
-
-.markdown-body :not(pre) > code {
-  background: #f0f0f0;
-  padding: 2px 6px;
-  border-radius: 4px;
-  font-size: 13px;
-}
-
-.markdown-body blockquote {
-  border-left: 4px solid #667eea;
-  padding-left: 12px;
-  margin: 8px 0;
-  color: #606266;
+/* 代码块语言标签 */
+.code-lang {
+  position: absolute;
+  top: 10px;
+  left: 14px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  color: var(--color-primary-soft);
+  opacity: 0.8;
 }
 
 /* 代码块复制按钮 */
@@ -1498,15 +1682,17 @@ const handleLogout = async () => {
   position: absolute;
   top: 8px;
   right: 8px;
-  padding: 4px 8px;
-  font-size: 12px;
-  background: rgba(0, 0, 0, 0.5);
-  color: white;
+  padding: 5px 7px;
+  background: rgba(255, 255, 255, 0.12);
+  color: var(--code-text);
   border: none;
-  border-radius: 4px;
+  border-radius: 6px;
   cursor: pointer;
   opacity: 0;
-  transition: opacity 0.2s;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  backdrop-filter: blur(4px);
 }
 
 .markdown-body pre:hover .code-copy-btn {
@@ -1514,34 +1700,12 @@ const handleLogout = async () => {
 }
 
 .code-copy-btn:hover {
-  background: rgba(0, 0, 0, 0.7);
+  background: rgba(255, 255, 255, 0.25);
 }
 
-/* 自定义滚动条 */
-.chat-messages::-webkit-scrollbar {
-  width: 6px;
-}
-
-.chat-messages::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-.chat-messages::-webkit-scrollbar-thumb {
-  background: #c0c4cc;
-  border-radius: 3px;
-}
-
-.chat-messages::-webkit-scrollbar-thumb:hover {
-  background: #909399;
-}
-
-.chat-list::-webkit-scrollbar {
-  width: 4px;
-}
-
-.chat-list::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.2);
-  border-radius: 2px;
+.code-copy-btn.copied {
+  color: var(--color-success);
+  opacity: 1;
 }
 
 /* 移动端遮罩 */
@@ -1551,8 +1715,9 @@ const handleLogout = async () => {
   left: 0;
   right: 0;
   bottom: 0;
-  background: rgba(0, 0, 0, 0.5);
+  background: rgba(0, 0, 0, 0.4);
   z-index: 99;
+  backdrop-filter: blur(2px);
 }
 
 /* 响应式设计 */
@@ -1565,44 +1730,48 @@ const handleLogout = async () => {
     transform: translateX(-100%);
     width: 280px;
   }
-  
+
   .sidebar.show {
     transform: translateX(0);
   }
-  
+
   .menu-btn {
     display: flex;
   }
-  
+
   .chat-messages {
-    padding: 16px;
+    padding: 18px 16px;
   }
-  
+
   .message {
-    max-width: 90%;
+    max-width: 92%;
   }
-  
+
   .chat-input {
     padding: 12px 16px;
   }
-  
+
   .model-selector {
     order: -1;
     width: 100%;
     margin-bottom: 8px;
   }
-  
+
   .user-info {
     display: none;
   }
-  
+
   .quick-questions {
-    padding: 0 16px;
+    padding: 0 8px;
   }
-  
+
   .scroll-bottom-btn {
     bottom: 90px;
-    right: 20px;
+    right: 18px;
+  }
+
+  .decor-blob {
+    display: none;
   }
 }
 </style>

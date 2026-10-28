@@ -87,6 +87,9 @@ api.interceptors.response.use(
         case 404:
           message = message || '请求的资源不存在'
           break
+        case 409:
+          message = message || '会话模型冲突，请新建会话'
+          break
         case 500:
           message = message || '服务器错误，请稍后重试'
           break

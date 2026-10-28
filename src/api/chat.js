@@ -56,12 +56,18 @@ export const sendMessageStream = async (sessionId, question, onChunk, onComplete
 
   if (!response.ok) {
     let message = `HTTP ${response.status}`
-    if (response.status === 400) {
+    let error = null
+    if (response.status === 409) {
+      message = '该会话已锁定模型，要切换请新建会话'
+      error = new Error(message)
+      error.code = 409
+      error.business = true
+    } else if (response.status === 400) {
       message = '请求参数错误，请稍后重试'
     } else if (response.status === 500) {
       message = 'AI 服务暂时不可用，请稍后重试'
     }
-    if (onError) onError(new Error(message))
+    if (onError) onError(error || new Error(message))
     return
   }
 
