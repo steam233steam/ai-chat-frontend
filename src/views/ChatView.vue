@@ -111,7 +111,6 @@
               :key="msg.id"
               :message="msg"
               @copy="copyMessage"
-              @pending-resolved="onPendingResolved"
             />
           </div>
         </AnimatePresence>
@@ -119,22 +118,43 @@
 
       <!-- 滚回底部按钮 -->
       <transition name="fade-slide">
-        <button v-if="showScrollBottom" class="scroll-bottom-btn" @click="scrollToBottom">
+        <button v-if="showScrollBottom && !pendingDialog.visible" class="scroll-bottom-btn" @click="scrollToBottom">
           <el-icon><ArrowDown /></el-icon>
         </button>
       </transition>
 
       <!-- 输入区域 -->
+      <!-- 弹窗关掉后保留一个入口，避免用户误点“稍后处理”后找不到待确认任务 -->
+      <div v-if="showPendingBanner" class="pending-banner">
+        <div class="pending-banner-icon"><el-icon><Bell /></el-icon></div>
+        <div class="pending-banner-text">
+          <strong>{{ pendingBannerTitle }}</strong>
+          <span>{{ pendingBannerDescription }}</span>
+        </div>
+        <el-button size="small" type="primary" @click="openPendingDialog(pendingDialog.id)">去确认</el-button>
+      </div>
+
       <ChatComposer
         v-model="inputMessage"
         v-model:selected-model="selectedModel"
         :model-options="modelOptions"
         :model-locked="modelLocked"
         :is-typing="isTyping"
+        :disabled="pendingDialog.visible"
         @send="handleSend"
         @stop="stopGeneration"
       />
     </main>
+
+    <!-- 任务/记忆确认弹窗：聊天命中意图后自动弹出；刷新页面也会从 current 恢复 -->
+    <TaskConfirmDialog
+      v-model:visible="pendingDialog.visible"
+      :data="pendingDialog.data"
+      :pending-id="pendingDialog.id"
+      :loading="pendingDialog.loading"
+      @resolved="onPendingResolved"
+      @dismiss="onPendingDismissed"
+    />
   </div>
 </template>
 
@@ -144,17 +164,24 @@ import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   Menu, Delete, ArrowDown, SwitchButton, Download, Loading,
-  Clock, Setting, MoreFilled
+  Clock, Setting, MoreFilled, Bell
 } from '@element-plus/icons-vue'
 import { sendMessageStream, getSessions, getHistory, clearSession, getModels } from '@/api/chat'
-import { getUserInfo, logout } from '@/api/user'
+import { getUserInfo, logout, getCurrentPendingAction, getPendingAction } from '@/api/user'
 import { enhanceCodeBlocks, exportChatAsJSON, exportChatAsText, copyText } from '@/utils/markdown'
 import ChatMessage from '@/components/ChatMessage.vue'
 import ChatSidebar from '@/components/ChatSidebar.vue'
 import ChatComposer from '@/components/ChatComposer.vue'
 import WelcomeScreen from '@/components/WelcomeScreen.vue'
+import TaskConfirmDialog from '@/components/TaskConfirmDialog.vue'
 import { useTheme } from '@/composables/useTheme'
 import { AnimatePresence } from 'motion-v'
+import {
+  extractPendingId,
+  stripMbMarker,
+  pendingCounts,
+  pendingDialogTitle
+} from '@/utils/pending'
 import { Moon, Sunny } from '@element-plus/icons-vue'
 
 const router = useRouter()
@@ -176,6 +203,28 @@ const windowWidth = ref(window.innerWidth)
 const showScrollBottom = ref(false)
 const isNearBottom = ref(true)
 const userInfo = ref(null)
+
+// ==================== MindButler 待确认弹窗 ====================
+const pendingDialog = reactive({
+  visible: false,
+  loading: false,
+  id: null,
+  data: null
+})
+// 防止“上一个会话的 current 请求”晚到，覆盖当前会话的弹窗
+let pendingFetchToken = 0
+
+const showPendingBanner = computed(
+  () => !!pendingDialog.id && pendingDialog.data?.status === 'pending' && !pendingDialog.visible
+)
+const pendingBannerTitle = computed(() => pendingDialogTitle(pendingDialog.data))
+const pendingBannerDescription = computed(() => {
+  const { tasks, memories } = pendingCounts(pendingDialog.data)
+  const parts = []
+  if (tasks > 0) parts.push(`${tasks} 个任务`)
+  if (memories > 0) parts.push(`${memories} 条记忆`)
+  return parts.length ? `${parts.join('、')}等待你确认` : '有一项内容等待你确认'
+})
 
 // 模型选择
 const modelOptions = ref([])
@@ -295,6 +344,7 @@ watch(
     if (!id || id === currentChatId.value) return
     abortActiveStream()
     activeAiMsg = null
+    resetPendingDialog()
     currentChatId.value = id
     messages.value = []
     syncSessionModel(id)
@@ -395,6 +445,9 @@ const loadMessages = async () => {
   await nextTick()
   enhanceCodeBlocks(messageContainer.value)
   await scrollToBottom()
+
+  // 历史接口不返回机器标记（落库时已剥离），刷新/切回会话时从后端恢复未处理提案
+  await restoreCurrentPending(sessionId)
 }
 
 // 加载更早的一页（滚动到顶部时触发），把旧消息 prepend 到列表顶部
@@ -510,6 +563,101 @@ const handleStreamError = (error, aiMsg, userMsgObj, originalText) => {
   }
 }
 
+// 关闭并清空待确认弹窗（切换会话/新建会话时调用，防止串会话）
+const resetPendingDialog = () => {
+  pendingFetchToken += 1
+  pendingDialog.visible = false
+  pendingDialog.loading = false
+  pendingDialog.id = null
+  pendingDialog.data = null
+}
+
+/**
+ * 打开确认弹窗。
+ * @param {number} id pending id
+ * @param {object|null} existingData 已经拿到详情时直接复用，避免多一次请求
+ */
+const openPendingDialog = async (id, existingData = null) => {
+  if (!id) return
+  const token = ++pendingFetchToken
+  pendingDialog.id = id
+  pendingDialog.visible = true
+  pendingDialog.data = existingData
+  pendingDialog.loading = !existingData
+  if (existingData) return
+
+  try {
+    const res = await getPendingAction(id)
+    if (token !== pendingFetchToken) return
+    if (res.code === 200 && res.data) {
+      pendingDialog.data = res.data
+    } else {
+      pendingDialog.visible = false
+      pendingDialog.id = null
+      pendingDialog.data = null
+      ElMessage.warning('这条确认已过期或已处理')
+    }
+  } catch (e) {
+    if (token !== pendingFetchToken) return
+    pendingDialog.visible = false
+    pendingDialog.id = null
+    pendingDialog.data = null
+    ElMessage.warning(e?.message || '这条确认已过期或已处理')
+  } finally {
+    if (token === pendingFetchToken) pendingDialog.loading = false
+  }
+}
+
+/**
+ * 页面刷新/切回会话时，从后端恢复未处理的 pending。
+ * 历史消息里的标记已在落库时剥离，所以必须靠 current 兜底。
+ */
+const restoreCurrentPending = async (sessionId) => {
+  if (!sessionId) return
+  try {
+    const res = await getCurrentPendingAction(sessionId)
+    if (sessionId !== currentChatId.value) return
+    if (res.code === 200 && res.data) {
+      await openPendingDialog(res.data.id, res.data)
+    }
+  } catch (e) {
+    // 恢复失败不打断聊天主流程；用户仍可通过文字“确认/取消”处理
+    console.warn('恢复待确认动作失败', e)
+  }
+}
+
+const onPendingResolved = (payload) => {
+  const action = payload?.action
+  if (pendingDialog.data) {
+    const status = action === 'confirmed' ? 'confirmed' : action === 'rejected' ? 'rejected' : 'expired'
+    pendingDialog.data = { ...pendingDialog.data, status }
+  }
+
+  if (action === 'confirmed') {
+    const result = payload?.result
+    if (result?.alreadyConfirmed) {
+      ElMessage.info('这条内容此前已经确认过了')
+    } else {
+      const taskCount = result?.tasks?.length ?? pendingCounts(pendingDialog.data).tasks
+      const memoryCount = result?.memories?.length ?? pendingCounts(pendingDialog.data).memories
+      const parts = []
+      if (taskCount > 0) parts.push(`${taskCount} 个任务`)
+      if (memoryCount > 0) parts.push(`${memoryCount} 条记忆`)
+      ElMessage.success(parts.length ? `已保存 ${parts.join('、')}` : '已确认')
+    }
+    loadSessions()
+  } else if (action === 'rejected') {
+    ElMessage.info('已取消本次操作')
+  } else if (action === 'expired') {
+    ElMessage.warning('这条确认已失效，请重新发送任务')
+  }
+}
+
+// “稍后处理”只收起弹窗，不拒绝后端 pending；底部提醒条可再次打开
+const onPendingDismissed = () => {
+  // 保留 pendingDialog.data，showPendingBanner 会自动接管提示
+}
+
 const handleSend = async () => {
   const trimmedInput = inputMessage.value.trim()
   if (!trimmedInput || isTyping.value) return
@@ -575,6 +723,13 @@ const handleSend = async () => {
           ElMessage.warning('未收到 AI 回复，请稍后重试')
           return
         }
+        // 命中任务/记忆提取时，后端会在文案尾部追加 [[MB:pending=N]]。
+        // 先取出 id 再把标记从消息内容里剥掉，避免复制/导出时带机器标记。
+        const pendingId = extractPendingId(aiMsg.content)
+        if (pendingId != null) {
+          aiMsg.content = stripMbMarker(aiMsg.content)
+          openPendingDialog(pendingId)
+        }
         nextTick(() => enhanceCodeBlocks(messageContainer.value))
         loadSessions()
       },
@@ -599,11 +754,6 @@ const copyMessage = async (text) => {
   } else {
     ElMessage.error('复制失败，请手动复制')
   }
-}
-
-// MindButler 确认卡片被处理（确认/拒绝）后刷新会话列表
-const onPendingResolved = () => {
-  loadSessions()
 }
 
 // 导出对话为文件
@@ -641,6 +791,7 @@ const exportChat = async (format = 'json') => {
 const newChat = async () => {
   abortActiveStream()
   activeAiMsg = null
+  resetPendingDialog()
   const newId = generateSessionId()
   currentChatId.value = newId
   messages.value = []
@@ -657,6 +808,7 @@ const selectChat = async (id) => {
 
   abortActiveStream()
   activeAiMsg = null
+  resetPendingDialog()
   currentChatId.value = id
   router.push(`/chat/${id}`)
   syncSessionModel(id)
@@ -703,6 +855,7 @@ const deleteChat = async (sessionId) => {
   if (currentChatId.value === sessionId) {
     abortActiveStream()
     activeAiMsg = null
+    resetPendingDialog()
   }
 
   const exists = chatSessions.value.some(s => s.sessionId === sessionId)
@@ -961,6 +1114,63 @@ const handleLogout = async () => {
   gap: 22px;
 }
 
+/* 待确认任务提醒条（弹窗点“稍后处理”后显示） */
+.pending-banner {
+  position: relative;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  width: calc(100% - 48px);
+  max-width: 900px;
+  margin: 0 auto 4px;
+  padding: 10px 12px;
+  border: 1px solid rgba(var(--color-primary-rgb), 0.2);
+  border-radius: 15px;
+  background: var(--bg-surface);
+  box-shadow: var(--shadow-md);
+}
+
+.pending-banner-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  background: rgba(var(--color-primary-rgb), 0.12);
+  color: var(--color-primary);
+  font-size: 16px;
+}
+
+.pending-banner-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.pending-banner-text strong {
+  overflow: hidden;
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pending-banner-text span {
+  color: var(--text-tertiary);
+  font-size: 11px;
+}
+
+.pending-banner .el-button {
+  flex: 0 0 auto;
+  border-radius: 9px;
+}
+
 /* 滚动回底部按钮 */
 .scroll-bottom-btn {
   position: absolute;
@@ -1040,6 +1250,15 @@ const handleLogout = async () => {
 
   .chat-messages {
     padding: 18px 12px;
+  }
+
+  .pending-banner {
+    width: calc(100% - 24px);
+    padding: 9px 10px;
+  }
+
+  .pending-banner-text span {
+    font-size: 10px;
   }
 
   .messages-stack {

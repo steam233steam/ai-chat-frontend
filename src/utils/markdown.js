@@ -4,28 +4,8 @@ import { nextTick } from 'vue'
 import { findUnclosedFence } from './fence'
 import { highlightRenderer } from './codeHighlight'
 
-// ==================== MindButler pending 标记工具 ====================
-
-/**
- * 从文案中提取 pending 动作 id（聊天文案尾部可能带 [[MB:pending=42]]）
- * @param {string} text
- * @returns {number|null} pendingId 或 null
- */
-export function extractPendingId(text) {
-  if (!text) return null
-  const m = text.match(/\[\[MB:pending=(\d+)\]\]/)
-  return m ? Number(m[1]) : null
-}
-
-/**
- * 剥离文案里的 [[MB:pending=N]] 标记（展示给用户时调用）
- * @param {string} text
- * @returns {string}
- */
-export function stripMbMarker(text) {
-  if (!text) return ''
-  return text.replace(/\[\[MB:pending=\d+\]\]\s*/g, '').trim()
-}
+// 保留旧导出，pending 标记工具已收拢到 utils/pending.js
+export { extractPendingId, stripMbMarker } from './pending'
 
 // marked 配置：换行转 <br>、启用 GFM
 marked.setOptions({

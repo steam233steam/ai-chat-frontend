@@ -3,6 +3,7 @@
 ## P1 - 功能与规范
 
 - [x] 删除冗余 Axios 实例（`api/index.js` 已移除，统一走 `api/request.js`）
+- [x] 聊天任务确认弹窗（✅ 2026-11-03：流式结束后解析 pending 标记，自动弹出 TaskConfirmDialog；确认/取消/稍后处理；刷新用 current 恢复）
 - [ ] 引入 Pinia 状态管理（user / chat / settings store，减轻 ChatView 单文件压力）
 - [x] 设置页与后端打通（✅ 2026-10-17：读取 `/user/me`、修改昵称 `PUT /user/profile`；2026-10-28 增加暗色主题切换，展示服务信息）
 - [x] 长会话消息分页加载（✅ 2026-10-26：`/chat/history` 支持 `limit/beforeId` 游标，滚动到顶部加载更早记录）
@@ -25,6 +26,16 @@
 - [x] 暗色模式（✅ 2026-10-28：设计令牌 + `useTheme` 单例 + 设置页切换 + 首屏防闪烁）
 - [ ] PWA 支持（vite-plugin-pwa，离线可用 + 安装到桌面）
 - [ ] 长消息列表性能（虚拟滚动或分页）
+
+## 变更记录（2026-11-03）
+
+**聊天任务弹窗**
+
+- 新增 `TaskConfirmDialog.vue`：任务/记忆候选展示、10 分钟倒计时、过期/已处理/成功状态、桌面居中 + 移动端底部抽屉
+- 新增 `utils/pending.js`：`extractPendingId` / `stripMbMarker` / LocalDateTime 解析 / 重复规则 / 倒计时 / 弹窗文案
+- `ChatView`：SSE 完成后提取 pendingId 并打开弹窗；刷新/切回会话用 `/user/pending-actions/current` 恢复；弹窗打开时禁用输入；收起后保留“去确认”提醒条
+- `ChatMessage` 移除旧的 inline 确认卡片，统一由全局弹窗承载；复制/导出前剥离机器标记
+- `ChatComposer` 增加 `disabled` 状态；新增 `tests/pending.test.js`（31 个测试全绿）
 
 ## 变更记录（2026-10-28）
 

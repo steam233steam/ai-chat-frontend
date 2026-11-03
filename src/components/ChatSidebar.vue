@@ -625,5 +625,29 @@ onUnmounted(() => document.removeEventListener('click', hideMenu))
   .sidebar.show {
     transform: translateX(0);
   }
+
+  /* 触屏没有 hover / 右键，让"更多"按钮常显，靠点按触发菜单 */
+  .more-btn {
+    opacity: 1;
+    width: 34px;
+    height: 34px;
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+  }
+
+  .more-btn:active {
+    background: rgba(255, 255, 255, 0.2);
+  }
+
+  /* 移动端：标题自动避让常显的更多按钮 */
+  .chat-item {
+    gap: 8px;
+  }
+
+  /* 上下文菜单贴到按钮左侧，避免贴边被裁切 */
+  .context-menu {
+    right: 44px;
+    min-width: 120px;
+  }
 }
 </style>

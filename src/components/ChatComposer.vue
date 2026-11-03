@@ -1,6 +1,6 @@
 <template>
   <div class="chat-input">
-    <div class="composer" :class="{ focused: inputFocused }">
+    <div class="composer" :class="{ focused: inputFocused, disabled }">
       <div class="composer-toolbar">
         <div v-if="showModelSelector" class="model-selector">
           <el-icon class="model-icon"><MagicStick /></el-icon>
@@ -37,7 +37,8 @@
           :model-value="modelValue"
           type="textarea"
           :rows="3"
-          placeholder="输入消息，开始新的对话..."
+          :placeholder="disabled ? '请先在弹窗中确认或取消任务…' : '输入消息，开始新的对话...'"
+          :disabled="disabled"
           :autosize="{ minRows: 3, maxRows: 8 }"
           class="message-input"
           autocomplete="off"
@@ -83,6 +84,7 @@ const props = defineProps({
   modelOptions: { type: Array, default: () => [] },
   modelLocked: { type: Boolean, default: false },
   isTyping: { type: Boolean, default: false },
+  disabled: { type: Boolean, default: false },
   maxLength: { type: Number, default: 8000 }
 })
 
@@ -91,7 +93,7 @@ const emit = defineEmits(['update:modelValue', 'update:selectedModel', 'send', '
 const inputFocused = ref(false)
 const showModelSelector = computed(() => props.modelOptions.length >= 2)
 const overLimit = computed(() => props.modelValue.length > props.maxLength)
-const canSend = computed(() => !!props.modelValue.trim() && !overLimit.value)
+const canSend = computed(() => !!props.modelValue.trim() && !overLimit.value && !props.disabled)
 
 const onEnterKey = (event) => {
   if (event.shiftKey || event.isComposing || event.keyCode === 229) return
@@ -123,6 +125,14 @@ const onEnterKey = (event) => {
 .composer.focused {
   border-color: var(--color-primary);
   box-shadow: var(--shadow-glow);
+}
+
+.composer.disabled {
+  opacity: 0.72;
+}
+
+.composer.disabled .message-input :deep(.el-textarea__inner) {
+  cursor: not-allowed;
 }
 
 .composer-toolbar {

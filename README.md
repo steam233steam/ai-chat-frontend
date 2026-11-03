@@ -2,7 +2,7 @@
 
 [![Frontend CI](https://github.com/steam233steam/ai-chat-frontend/actions/workflows/ci.yml/badge.svg)](https://github.com/steam233steam/ai-chat-frontend/actions/workflows/ci.yml)
 
-基于 Vue 3 + Vite + Element Plus 的 AI 聊天系统前端，对接 [Spring Boot 后端](https://github.com/steam233steam/ai-chat-backend)（API v5.0，Redis + MySQL + Ollama）。
+基于 Vue 3 + Vite + Element Plus 的 AI 聊天系统前端，对接 Spring Boot 后端（API v7.2，MindButler P1：长期记忆 + 口语化任务 + 待确认动作）。
 
 ## 功能特性
 
@@ -18,6 +18,7 @@
 - **动效**：motion-v 入场/退场动画（AnimatePresence / motion.div）
 - **响应式布局**：PC 与移动端自适应，侧边栏可折叠
 - **离线提示**：网络状态检测，断网时顶部横幅提示
+- **聊天建任务**：聊天里说“明天下午三点提醒我开会”会命中意图提取，流式结束后自动弹出任务确认弹窗；确认后才写入任务列表，取消/稍后处理不会落库；刷新或切回会话会用 `/user/pending-actions/current` 恢复未处理提案
 
 ## 快速开始
 
@@ -77,10 +78,10 @@ src/
 ├── router/       # 路由与登录守卫
 ├── views/        # chat / login / history / settings / 404 / layout
 ├── components/   # ChatSidebar / ChatMessage / ChatComposer / StreamingMarkdown /
-│                 # WelcomeScreen / OfflineBanner
+│                 # TaskConfirmDialog / WelcomeScreen / OfflineBanner
 ├── composables/  # useNetwork / useTypewriter / useTheme
 ├── assets/       # design.css（设计 token，明暗双主题）+ main.css
-└── utils/        # markdown.js、codeHighlight.js、fence.js、sse.js
+└── utils/        # markdown.js、pending.js、codeHighlight.js、fence.js、sse.js
 ```
 
 **设计系统**（`src/assets/design.css`）：LobeChat 风格，定义品牌色、背景、文本、边框、气泡、代码块、阴影、圆角、玻璃拟态等 CSS 变量；`html[data-theme='dark']` 覆盖为深色值；`main.css` 把这些变量映射到 Element Plus 的 `--el-*` 变量，实现组件主题自动跟随。
@@ -91,15 +92,16 @@ src/
 npm test           # 单元测试（node --test）
 ```
 
-测试用例（21 个）：
+测试用例（31 个）：
 
 - `tests/sse.test.js`：SSE 解析器 9 个用例（前导空格保留、跨 chunk 分片、CRLF、注释行忽略、`[DONE]`、flush 截断、stop 后静默等）
 - `tests/fence.test.js`：围栏工具 8 个用例（平衡/未闭合、~~~ 支持、区间扫描、换行切分、不切开未闭合代码块、代码块闭合后继续推进等）
 - `tests/highlight.test.js`：高亮 4 个用例（已知语言输出 span、未知语言转义、vue/html 映射 xml、无语言纯文本）
+- `tests/pending.test.js`：待确认动作 10 个用例（标记提取/剥离、LocalDateTime 解析、日期/重复规则、倒计时、标题/按钮文案、确认结果、SSE 多行 data 提取）
 
 ## CI
 
-GitHub Actions 在每次 push 时执行 `npm ci`、`npm test`（上述 21 个用例）和 `npm run build`（`.github/workflows/ci.yml`）。
+GitHub Actions 在每次 push 时执行 `npm ci`、`npm test`（上述 31 个用例）和 `npm run build`（`.github/workflows/ci.yml`）。
 
 ## 技术栈
 
@@ -107,6 +109,11 @@ Vue 3 · Vite · Element Plus · Vue Router 4 · Axios · marked · DOMPurify ·
 
 ## 变更记录
 
+- **v7.2（2026-11-03）**：
+  - 聊天触发任务：解析 `/chat/ask-stream` 文案尾部的 `[[MB:pending=N]]`，SSE 结束后自动打开任务确认弹窗
+  - `TaskConfirmDialog`：任务/记忆混合确认、倒计时、过期/已处理状态、确认/取消/稍后处理，移动端底部抽屉
+  - 刷新/切回会话调用 `/user/pending-actions/current` 恢复未处理提案；弹窗打开时禁用输入，收起后保留“去确认”提醒条
+  - `utils/pending.js` + 10 个纯函数测试；历史/复制/导出展示前统一剥离机器标记
 - **v5.2（2026-10-28）**：
   - 设计系统：LobeChat 风格双主题（`design.css` + `useTheme` + Element Plus 变量映射）
   - 组件拆分：`ChatView` 拆出 `ChatSidebar` / `ChatMessage` / `ChatComposer` / `StreamingMarkdown` / `WelcomeScreen`
