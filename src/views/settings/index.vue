@@ -67,6 +67,77 @@
         </el-form>
       </el-card>
 
+      <!-- MindButler 管理 -->
+      <el-card class="card">
+        <template #header>
+          <span class="card-title"><el-icon><Connection /></el-icon>MindButler · 记忆与任务</span>
+        </template>
+        <div class="mb-tabs">
+          <el-button-group size="small">
+            <el-button :type="mbTab === 'tasks' ? 'primary' : 'default'" @click="mbTab = 'tasks'">任务</el-button>
+            <el-button :type="mbTab === 'memories' ? 'primary' : 'default'" @click="mbTab = 'memories'">记忆</el-button>
+          </el-button-group>
+        </div>
+
+        <!-- 任务 tab -->
+        <div v-if="mbTab === 'tasks'" v-loading="mbLoading" class="mb-panel">
+          <div class="mb-panel-header">
+            <span class="mb-panel-title">我的任务（{{ mbTaskFilter }}）</span>
+            <el-button size="small" @click="mbLoadTasks">刷新</el-button>
+          </div>
+          <div v-if="mbTasks.length === 0" class="mb-empty">暂无任务</div>
+          <div v-else class="mb-list">
+            <div v-for="task in mbTasks" :key="task.id" :class="['mb-row', task.overdue ? 'mb-row-overdue' : '']">
+              <div class="mb-row-main">
+                <div class="mb-row-title">{{ task.title }}</div>
+                <div class="mb-row-meta">
+                  <span v-if="task.dueAt">{{ formatMbDate(task.dueAt) }}</span>
+                  <el-tag v-if="task.recurrence && task.recurrence !== 'once'" size="small" type="info" effect="plain">{{ mbRecurrence(task.recurrence) }}</el-tag>
+                  <el-tag v-if="task.overdue" size="small" type="danger" effect="light">已逾期</el-tag>
+                  <el-tag size="small" :type="task.status === 'done' ? 'success' : task.status === 'cancelled' ? 'info' : 'warning'" effect="light">{{ mbStatus(task.status) }}</el-tag>
+                </div>
+              </div>
+              <div class="mb-row-actions">
+                <el-button v-if="task.status === 'pending'" size="small" type="primary" link :loading="mbActing === `t${task.id}`" @click="mbCompleteTask(task)">完成</el-button>
+                <el-button size="small" type="danger" link :loading="mbActing === `td${task.id}`" @click="mbDeleteTask(task)">删除</el-button>
+              </div>
+            </div>
+          </div>
+          <div class="mb-filter">
+            <el-radio-group v-model="mbTaskFilter" size="small" @change="mbLoadTasks">
+              <el-radio-button value="pending">待办</el-radio-button>
+              <el-radio-button value="done">已完成</el-radio-button>
+              <el-radio-button value="cancelled">已取消</el-radio-button>
+            </el-radio-group>
+          </div>
+        </div>
+
+        <!-- 记忆 tab -->
+        <div v-if="mbTab === 'memories'" v-loading="mbLoading" class="mb-panel">
+          <div class="mb-panel-header">
+            <span class="mb-panel-title">生效记忆（{{ mbMemories.length }}）</span>
+            <el-button size="small" @click="mbLoadMemories">刷新</el-button>
+          </div>
+          <div v-if="mbMemories.length === 0" class="mb-empty">暂无记忆</div>
+          <div v-else class="mb-list">
+            <div v-for="mem in mbMemories" :key="mem.id" class="mb-row">
+              <div class="mb-row-main">
+                <div class="mb-row-title">{{ mem.content }}</div>
+                <div class="mb-row-meta">
+                  <el-tag size="small" type="info" effect="plain">{{ mem.memKey }}</el-tag>
+                  <el-tag v-if="mem.memType" size="small" effect="plain">{{ mem.memType }}</el-tag>
+                  <el-tag size="small" :type="mem.status === 'active' ? 'success' : 'info'" effect="light">{{ mem.status }}</el-tag>
+                  <span v-if="mem.expiresAt">到期 {{ formatMbDate(mem.expiresAt) }}</span>
+                </div>
+              </div>
+              <div class="mb-row-actions">
+                <el-button size="small" type="danger" link :loading="mbActing === `m${mem.id}`" @click="mbDeleteMemory(mem)">删除</el-button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </el-card>
+
       <!-- 服务信息 -->
       <el-card class="card">
         <template #header>
@@ -107,7 +178,7 @@ import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { ArrowLeft, Clock, SwitchButton, Sunny, User, Connection, MoreFilled } from '@element-plus/icons-vue'
-import { getUserInfo, updateProfile, logout } from '@/api/user'
+import { getUserInfo, updateProfile, logout, getTasks, completeTask, deleteTask, getMemories, deleteMemory } from '@/api/user'
 import { useTheme } from '@/composables/useTheme'
 
 const router = useRouter()
@@ -117,6 +188,91 @@ const name = ref('')
 const loading = ref(false)
 const saving = ref(false)
 const loggingOut = ref(false)
+
+// ==================== MindButler 管理 ====================
+const mbTab = ref('tasks')
+const mbLoading = ref(false)
+const mbActing = ref(null)
+const mbTasks = ref([])
+const mbMemories = ref([])
+const mbTaskFilter = ref('pending')
+
+const formatMbDate = (val) => {
+  if (!val) return ''
+  const d = new Date(val)
+  return Number.isNaN(d.getTime()) ? String(val) : d.toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })
+}
+const mbRecurrence = (r) => ({ daily: '每日', weekly: '每周', monthly: '每月', once: '单次' }[r] || r)
+const mbStatus = (s) => ({ pending: '待办', done: '已完成', cancelled: '已取消' }[s] || s)
+
+const mbLoadTasks = async () => {
+  mbLoading.value = true
+  try {
+    const res = await getTasks(mbTaskFilter.value)
+    mbTasks.value = res.code === 200 ? (res.data || []) : []
+  } catch (e) {
+    console.error('加载任务失败', e)
+    mbTasks.value = []
+  } finally {
+    mbLoading.value = false
+  }
+}
+
+const mbLoadMemories = async () => {
+  mbLoading.value = true
+  try {
+    const res = await getMemories()
+    mbMemories.value = res.code === 200 ? (res.data || []) : []
+  } catch (e) {
+    console.error('加载记忆失败', e)
+    mbMemories.value = []
+  } finally {
+    mbLoading.value = false
+  }
+}
+
+const mbCompleteTask = async (task) => {
+  mbActing.value = `t${task.id}`
+  try {
+    const res = await completeTask(task.id, task.version)
+    if (res.code === 200) {
+      ElMessage.success(task.recurrence === 'once' ? '任务已完成' : '已滚动到下一次')
+      mbLoadTasks()
+    } else {
+      ElMessage.warning(res.message || '操作失败')
+    }
+  } catch (e) {
+    ElMessage.error(e?.message || '操作失败')
+  } finally {
+    mbActing.value = null
+  }
+}
+
+const mbDeleteTask = async (task) => {
+  mbActing.value = `td${task.id}`
+  try {
+    await deleteTask(task.id)
+    ElMessage.success('任务已删除')
+    mbLoadTasks()
+  } catch (e) {
+    ElMessage.error(e?.message || '删除失败')
+  } finally {
+    mbActing.value = null
+  }
+}
+
+const mbDeleteMemory = async (mem) => {
+  mbActing.value = `m${mem.id}`
+  try {
+    await deleteMemory(mem.id)
+    ElMessage.success('记忆已删除')
+    mbLoadMemories()
+  } catch (e) {
+    ElMessage.error(e?.message || '删除失败')
+  } finally {
+    mbActing.value = null
+  }
+}
 
 const { isDark } = useTheme()
 
@@ -205,7 +361,11 @@ const handleLogout = async () => {
   }
 }
 
-onMounted(loadUser)
+onMounted(() => {
+  loadUser()
+  mbLoadTasks()
+  mbLoadMemories()
+})
 </script>
 
 <style scoped>
@@ -348,6 +508,99 @@ onMounted(loadUser)
   padding: 1px 5px;
   border-radius: 4px;
   font-size: 11px;
+}
+
+.mb-tabs {
+  margin-bottom: 14px;
+}
+
+.mb-panel {
+  min-height: 60px;
+}
+
+.mb-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+.mb-panel-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.mb-empty {
+  padding: 28px 0;
+  text-align: center;
+  color: var(--text-tertiary);
+  font-size: 13px;
+}
+
+.mb-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.mb-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 12px;
+  background: var(--bg-surface-soft);
+  transition: all 0.2s ease;
+}
+
+.mb-row:hover {
+  border-color: var(--color-primary-soft);
+  box-shadow: var(--shadow-sm);
+}
+
+.mb-row-overdue {
+  border-color: rgba(239, 68, 68, 0.35);
+  background: rgba(239, 68, 68, 0.05);
+}
+
+.mb-row-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.mb-row-title {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mb-row-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  font-size: 11px;
+  color: var(--text-tertiary);
+}
+
+.mb-row-actions {
+  flex-shrink: 0;
+  display: flex;
+  gap: 4px;
+}
+
+.mb-filter {
+  margin-top: 12px;
+  display: flex;
+  justify-content: center;
 }
 
 .actions {

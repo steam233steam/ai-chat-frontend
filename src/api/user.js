@@ -46,6 +46,13 @@ export const getUserInfo = () => {
 }
 
 /**
+ * 检查是否新用户
+ */
+export const isNewUser = () => {
+  return api.get('/user/is-new-user')
+}
+
+/**
  * 修改用户资料
  * @param {string} name - 昵称
  */
@@ -58,4 +65,99 @@ export const updateProfile = (name) => {
  */
 export const logout = () => {
   return api.post('/user/logout')
+}
+
+// ==================== MindButler P1 ====================
+
+// ---------- 用户任务 /user/tasks ----------
+
+/** 到期待办（status=pending、有 dueAt 且已到期，按 dueAt 升序） */
+export const getDueTasks = (limit = 50) => {
+  return api.get('/user/tasks/due', { params: { limit } })
+}
+
+/** 任务列表（游标分页） */
+export const getTasks = (status = 'pending', beforeId, limit = 50) => {
+  const params = { status, limit }
+  if (beforeId) params.beforeId = beforeId
+  return api.get('/user/tasks', { params })
+}
+
+/** 查单条任务 */
+export const getTask = (id) => {
+  return api.get(`/user/tasks/${id}`)
+}
+
+/** 手动创建任务（不走 LLM） */
+export const createTask = (request) => {
+  return api.post('/user/tasks', request)
+}
+
+/** 更新任务（乐观锁） */
+export const updateTask = (id, request) => {
+  return api.put(`/user/tasks/${id}`, request)
+}
+
+/** 完成任务（once→done；daily/weekly 滚动到下次） */
+export const completeTask = (id, version) => {
+  return api.post(`/user/tasks/${id}/complete`, { version })
+}
+
+/** 删除任务（软删） */
+export const deleteTask = (id) => {
+  return api.delete(`/user/tasks/${id}`)
+}
+
+// ---------- 用户记忆 /user/memories ----------
+
+/** 查询生效记忆（active 且未过期） */
+export const getMemories = (limit = 100) => {
+  return api.get('/user/memories', { params: { limit } })
+}
+
+/** 导出全部记忆（含 superseded） */
+export const exportMemories = () => {
+  return api.get('/user/memories/export')
+}
+
+/** 查单条记忆 */
+export const getMemory = (id) => {
+  return api.get(`/user/memories/${id}`)
+}
+
+/** 手动创建记忆 */
+export const createMemory = (request) => {
+  return api.post('/user/memories', request)
+}
+
+/** 更新记忆（乐观锁） */
+export const updateMemory = (id, request) => {
+  return api.put(`/user/memories/${id}`, request)
+}
+
+/** 删除记忆（软删） */
+export const deleteMemory = (id) => {
+  return api.delete(`/user/memories/${id}`)
+}
+
+// ---------- 待确认动作 /user/pending-actions ----------
+
+/** 当前会话的待确认动作（data 可能为 null） */
+export const getCurrentPendingAction = (sessionId) => {
+  return api.get('/user/pending-actions/current', { params: { sessionId } })
+}
+
+/** 按 id 查单条待确认动作（前端拿到 [[MB:pending=N]] 里的 id 后调用） */
+export const getPendingAction = (id) => {
+  return api.get(`/user/pending-actions/${id}`)
+}
+
+/** 确认待确认动作 */
+export const confirmPendingAction = (id) => {
+  return api.post(`/user/pending-actions/${id}/confirm`)
+}
+
+/** 拒绝待确认动作 */
+export const rejectPendingAction = (id) => {
+  return api.post(`/user/pending-actions/${id}/reject`)
 }

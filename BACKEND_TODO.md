@@ -10,6 +10,7 @@
 - [ ] `/chat/ask-stream` 改为 POST（语义修正）
 - [ ] `Authorization` 加 `Bearer` 前缀（前后端同步修改）
 - [ ] 删除 / 清空会话接口分离
+- [ ] `/chat/ask` 返回 409 表示会话模型冲突（✅ 2026-10-28 前端已处理：409 时回滚未落库的用户消息、恢复输入框内容、刷新会话列表并展示真实锁定模型；后端需保证会话锁模型后返回 409 + 真实模型名）
 - [x] 统一 system prompt（✅ ChatClientConfig 统一系统提示词）
 - [x] 全局异常处理（✅ GlobalExceptionHandler + BusinessException）
 

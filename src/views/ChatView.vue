@@ -111,6 +111,7 @@
               :key="msg.id"
               :message="msg"
               @copy="copyMessage"
+              @pending-resolved="onPendingResolved"
             />
           </div>
         </AnimatePresence>
@@ -598,6 +599,11 @@ const copyMessage = async (text) => {
   } else {
     ElMessage.error('复制失败，请手动复制')
   }
+}
+
+// MindButler 确认卡片被处理（确认/拒绝）后刷新会话列表
+const onPendingResolved = () => {
+  loadSessions()
 }
 
 // 导出对话为文件

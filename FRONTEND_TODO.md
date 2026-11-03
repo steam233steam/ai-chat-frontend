@@ -4,7 +4,7 @@
 
 - [x] 删除冗余 Axios 实例（`api/index.js` 已移除，统一走 `api/request.js`）
 - [ ] 引入 Pinia 状态管理（user / chat / settings store，减轻 ChatView 单文件压力）
-- [ ] 设置页与后端打通（新增 `GET/PUT /user/settings`，模型与温度参数传给后端）
+- [x] 设置页与后端打通（✅ 2026-10-17：读取 `/user/me`、修改昵称 `PUT /user/profile`；2026-10-28 增加暗色主题切换，展示服务信息）
 - [x] 长会话消息分页加载（✅ 2026-10-26：`/chat/history` 支持 `limit/beforeId` 游标，滚动到顶部加载更早记录）
 
 ## P2 - 工程质量

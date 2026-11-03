@@ -19,17 +19,25 @@
       <div class="message-bubble">
         <StreamingMarkdown
           v-if="message.role === 'ai'"
-          :content="message.content"
+          :content="displayContent()"
           :streaming="!!message.streaming"
         />
         <p v-else class="plain-text">{{ message.content }}</p>
       </div>
       <div class="message-actions" v-if="!message.streaming">
-        <el-button text size="small" @click="emit('copy', message.content)">
+        <el-button text size="small" @click="emit('copy', message.role === 'ai' ? displayContent() : message.content)">
           <el-icon><CopyDocument /></el-icon>
           复制
         </el-button>
       </div>
+      <!-- MindButler 确认卡片（AI 消息尾部带 [[MB:pending=N]] 时显示） -->
+      <PendingConfirmCard
+        v-if="message.role === 'ai' && pendingData"
+        :data="pendingData"
+        :pending-id="pendingId"
+        @confirmed="onPendingResolved"
+        @rejected="onPendingResolved"
+      />
     </div>
   </motion.div>
 </template>
@@ -38,12 +46,44 @@
 import { ChatDotRound, CopyDocument } from '@element-plus/icons-vue'
 import { motion } from 'motion-v'
 import StreamingMarkdown from '@/components/StreamingMarkdown.vue'
+import PendingConfirmCard from '@/components/PendingConfirmCard.vue'
+import { extractPendingId, stripMbMarker } from '@/utils/markdown'
+import { getPendingAction } from '@/api/user'
+import { ref, watch } from 'vue'
 
-defineProps({
+const props = defineProps({
   message: { type: Object, required: true }
 })
 
-const emit = defineEmits(['copy'])
+const emit = defineEmits(['copy', 'pending-resolved'])
+
+// 从 AI 消息内容里检测 pending 标记，拉详情渲染确认卡片
+const pendingData = ref(null)
+const pendingId = ref(null)
+
+watch(
+  () => props.message.content,
+  (content) => {
+    if (props.message.role !== 'ai') return
+    const id = extractPendingId(content)
+    if (id == null) return
+    pendingId.value = id
+    getPendingAction(id).then((res) => {
+      if (res.code === 200 && res.data) {
+        pendingData.value = res.data
+      }
+    }).catch(() => {})
+  },
+  { immediate: true }
+)
+
+// 展示文案时剥离机器标记
+const displayContent = () => stripMbMarker(props.message.content)
+
+const onPendingResolved = () => {
+  // 通知父组件刷新会话（可选）
+  emit('pending-resolved', pendingId.value)
+}
 
 const messageVariants = {
   hidden: { opacity: 0, y: 12, scale: 0.98 },
