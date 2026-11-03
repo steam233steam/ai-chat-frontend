@@ -73,6 +73,8 @@
                 <article v-for="(memory, index) in memories" :key="`memory-${index}`" class="mb-memory-item">
                   <span class="mb-memory-key">{{ memoryKeyLabel(memory.key || memory.memKey) }}</span>
                   <span class="mb-memory-value">{{ memory.value || memory.content || '' }}</span>
+                  <span v-if="memory.sessionId" class="mb-task-badge is-scope">会话</span>
+                  <span v-else class="mb-task-badge is-scope">全局</span>
                   <span v-if="memory.memType" class="mb-task-badge is-memory">{{ memory.memType === 'stable' ? '长期' : '动态' }}</span>
                 </article>
               </section>
@@ -742,6 +744,12 @@ onBeforeUnmount(() => {
 .mb-task-badge.is-memory {
   background: rgba(var(--color-primary-rgb), 0.1);
   color: var(--color-primary);
+}
+
+.mb-task-badge.is-scope {
+  background: rgba(245, 158, 11, 0.1);
+  color: var(--color-warning);
+  font-size: 10px;
 }
 
 .mb-memory-key {
