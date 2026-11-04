@@ -645,9 +645,14 @@ const onPendingResolved = (payload) => {
       if (memoryCount > 0) parts.push(`${memoryCount} 条记忆`)
       ElMessage.success(parts.length ? `已保存 ${parts.join('、')}` : '已确认')
     }
+    // P1.1b：确认成功后后端把"好的，都帮你设好了…"反馈文案作为 assistant 消息落库到本会话，
+    // 重新拉取历史让这条回音出现在聊天流里，同时刷新会话列表
     loadSessions()
+    loadMessages()
   } else if (action === 'rejected') {
     ElMessage.info('已取消本次操作')
+    // 拒绝为幂等静默成功，不会落库新消息，只刷新会话列表
+    loadSessions()
   } else if (action === 'expired') {
     ElMessage.warning('这条确认已失效，请重新发送任务')
   }

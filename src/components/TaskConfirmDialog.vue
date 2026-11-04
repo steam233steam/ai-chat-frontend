@@ -73,7 +73,8 @@
                 <article v-for="(memory, index) in memories" :key="`memory-${index}`" class="mb-memory-item">
                   <span class="mb-memory-key">{{ memoryKeyLabel(memory.key || memory.memKey) }}</span>
                   <span class="mb-memory-value">{{ memory.value || memory.content || '' }}</span>
-                  <span v-if="memory.sessionId" class="mb-task-badge is-scope">会话</span>
+                  <!-- v7.4: scope 字段（global/session），兼容旧版 sessionId -->
+                  <span v-if="memory.scope === 'session' || memory.sessionId" class="mb-task-badge is-scope">会话</span>
                   <span v-else class="mb-task-badge is-scope">全局</span>
                   <span v-if="memory.memType" class="mb-task-badge is-memory">{{ memory.memType === 'stable' ? '长期' : '动态' }}</span>
                 </article>

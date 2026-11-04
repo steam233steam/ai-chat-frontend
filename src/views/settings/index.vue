@@ -126,7 +126,7 @@
                 <div class="mb-row-meta">
                   <el-tag size="small" type="info" effect="plain">{{ mem.memKey }}</el-tag>
                   <el-tag v-if="mem.memType" size="small" effect="plain">{{ mem.memType }}</el-tag>
-                  <el-tag v-if="mem.sessionId" size="small" type="warning" effect="plain" :title="'仅会话 ' + mem.sessionId + ' 生效'">会话级</el-tag>
+                  <el-tag v-if="mem.scope === 'session' || mem.sessionId" size="small" type="warning" effect="plain" :title="mem.scope === 'session' || mem.sessionId ? '仅本会话生效' : ''">会话级</el-tag>
                   <el-tag v-else size="small" effect="plain">全局</el-tag>
                   <el-tag size="small" :type="mem.status === 'active' ? 'success' : 'info'" effect="light">{{ mem.status }}</el-tag>
                   <span v-if="mem.expiresAt">到期 {{ formatMbDate(mem.expiresAt) }}</span>
