@@ -93,6 +93,9 @@ api.interceptors.response.use(
         case 500:
           message = message || '服务器错误，请稍后重试'
           break
+        case 503:
+          message = message || '短信服务暂不可用，请改用密码登录或联系管理员'
+          break
         default:
           message = message || `请求失败（${status}）`
       }

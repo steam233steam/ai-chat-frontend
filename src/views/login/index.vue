@@ -387,8 +387,14 @@ const sendCodeForPassword = async ({ silent = false } = {}) => {
       ElMessage.warning(res.message || '发送失败')
     }
   } catch (error) {
+    // 503 短信服务未配置（dev 模式没接供应商）：引导改用密码登录，不进 60s 冷却
+    if (error?.code === 503) {
+      ElMessage.error(error?.message || '短信服务暂不可用，请改用密码登录或联系管理员')
+      return
+    }
     ElMessage.warning(error?.message || '验证码发送失败，请稍后重试')
-    if (error?.message?.includes('频繁')) startCountdown()
+    // 400 且后端提示发送过于频繁（60s 冷却）才启动倒计时，让用户等
+    if (error?.code === 400 && error?.message?.includes('频繁')) startCountdown()
   }
 }
 
@@ -468,8 +474,14 @@ const sendCode = async () => {
       ElMessage.warning(res.message || '发送失败')
     }
   } catch (error) {
+    // 503 短信服务未配置（dev 模式没接供应商）：引导改用密码登录，不进 60s 冷却
+    if (error?.code === 503) {
+      ElMessage.error(error?.message || '短信服务暂不可用，请改用密码登录或联系管理员')
+      return
+    }
     ElMessage.warning(error?.message || '验证码发送失败，请稍后重试')
-    if (error?.message?.includes('频繁')) startCountdown()
+    // 400 且后端提示发送过于频繁（60s 冷却）才启动倒计时，让用户等
+    if (error?.code === 400 && error?.message?.includes('频繁')) startCountdown()
   }
 }
 
