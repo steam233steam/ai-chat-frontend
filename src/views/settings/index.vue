@@ -180,8 +180,9 @@ import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { ArrowLeft, Clock, SwitchButton, Sunny, User, Connection, MoreFilled } from '@element-plus/icons-vue'
-import { getUserInfo, updateProfile, logout, getTasks, completeTask, deleteTask, getMemories, deleteMemory } from '@/api/user'
+import { getUserInfo, updateProfile, logout, getTasks, completeTask, deleteTask, getMemories, deleteMemory, getTask } from '@/api/user'
 import { useTheme } from '@/composables/useTheme'
+import { formatDueAt } from '@/utils/pending'
 
 const router = useRouter()
 
@@ -200,9 +201,8 @@ const mbMemories = ref([])
 const mbTaskFilter = ref('pending')
 
 const formatMbDate = (val) => {
-  if (!val) return ''
-  const d = new Date(val)
-  return Number.isNaN(d.getTime()) ? String(val) : d.toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })
+  // 后端返回的是无时区 LocalDateTime 字符串，用字面量解析避免浏览器当 UTC 偏移 8 小时
+  return formatDueAt(val, { compact: true })
 }
 const mbRecurrence = (r) => ({ daily: '每日', weekly: '每周', monthly: '每月', once: '单次' }[r] || r)
 const mbStatus = (s) => ({ pending: '待办', done: '已完成', cancelled: '已取消' }[s] || s)
@@ -236,7 +236,15 @@ const mbLoadMemories = async () => {
 const mbCompleteTask = async (task) => {
   mbActing.value = `t${task.id}`
   try {
-    const res = await completeTask(task.id, task.version)
+    // 列表接口不保证返回 version；乐观锁 409 时先拉单条任务拿最新 version 再完成
+    let version = task.version
+    if (version == null) {
+      const detail = await getTask(task.id)
+      if (detail.code === 200 && detail.data) {
+        version = detail.data.version
+      }
+    }
+    const res = await completeTask(task.id, version)
     if (res.code === 200) {
       ElMessage.success(task.recurrence === 'once' ? '任务已完成' : '已滚动到下一次')
       mbLoadTasks()
@@ -244,7 +252,13 @@ const mbCompleteTask = async (task) => {
       ElMessage.warning(res.message || '操作失败')
     }
   } catch (e) {
-    ElMessage.error(e?.message || '操作失败')
+    // 409 多为版本过期，刷新任务列表即可
+    if (e?.code === 409) {
+      ElMessage.warning('任务状态已变化，请刷新后重试')
+      mbLoadTasks()
+    } else {
+      ElMessage.error(e?.message || '操作失败')
+    }
   } finally {
     mbActing.value = null
   }

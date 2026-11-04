@@ -13,7 +13,7 @@
           aria-modal="true"
           aria-labelledby="mb-dialog-title"
         >
-          <header class="mb-dialog-header" :class="`is-${mode}`">
+          <header class="mb-dialog-header" :class="data ? `is-${mode}` : 'is-neutral'">
             <div class="mb-dialog-icon">
               <el-icon><Bell /></el-icon>
             </div>
@@ -541,6 +541,16 @@ onBeforeUnmount(() => {
 .is-mixed .mb-dialog-icon {
   background: linear-gradient(135deg, #8b5cf6, #ec4899);
   box-shadow: 0 10px 24px rgba(139, 92, 246, 0.32);
+}
+
+.is-neutral .mb-dialog-header {
+  background: var(--bg-surface-soft);
+}
+
+.is-neutral .mb-dialog-icon {
+  background: var(--bg-surface-soft);
+  color: var(--text-tertiary);
+  box-shadow: none;
 }
 
 .mb-dialog-heading {
