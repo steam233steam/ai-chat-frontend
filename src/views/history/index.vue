@@ -124,6 +124,10 @@ const deleteChat = async (sessionId) => {
   try {
     await clearSession(sessionId)
     chatHistory.value = chatHistory.value.filter(c => c.sessionId !== sessionId)
+    // P1.3 级联清理：删的是当前会话时清掉本地存的 currentSessionId，避免 settings 面板拿到过期会话
+    if (localStorage.getItem('currentSessionId') === sessionId) {
+      localStorage.removeItem('currentSessionId')
+    }
     ElMessage.success('已删除')
   } catch (error) {
     console.error('删除失败', error)

@@ -11,6 +11,8 @@
 - **打字机引擎**：LobeChat 式 buffer + queue + 匀速消费，30fps 吐字，已定型前缀渲染一次后冻结
 - **代码高亮**：highlight.js 按需注册 18 种语言（js/ts/python/java/go/rust/c/cpp/csharp/bash/sql/json/xml/yaml/css/markdown/diff），未知语言回退纯文本转义；vue/html 映射 xml
 - **模型选择**：调用 `/chat/models` 拉取白名单模型，会话内模型锁定，消息气泡显示模型标签
+- **MindButler 待确认**：AI 命中"任务/记忆提取"意图时，聊天文案尾部追加 `[[MB:pending=N]]` 机器标记，自动弹出确认弹窗（任务 + 记忆）；展示/复制/导出前统一剥离标记；弹窗带倒计时、幂等确认、过期恢复；"稍后处理"保留底部提醒条可再次打开
+- **我的任务 / 记忆管理**：设置页提供任务列表（待办/已完成/已取消过滤、完成、删除）与记忆列表（删除），完成任务走乐观锁（409 时拉单条任务拿最新 version 重试）
 - **会话管理**：新建 / 切换 / 重命名（限 50 字）/ 删除 / 导出（JSON、纯文本），侧边栏支持搜索对话
 - **历史分页**：`limit` + `beforeId` 游标分页，滚动到顶部加载更早记录
 - **Markdown 渲染**：代码块带一键复制按钮 + 语言标签，Clipboard API 不可用时降级 `execCommand`，内容经 DOMPurify 净化
@@ -69,6 +71,8 @@ npm run build      # 产物输出到 dist/
 - **`src/utils/markdown.js`**：`renderStreamingMarkdown` 在流式输出中检测到未闭合围栏时补一个临时闭合符再交给 marked，避免代码块闪烁；`copyText` 在非 HTTPS 环境降级 `execCommand`
 - **`src/utils/codeHighlight.js`**：highlight.js 按需注册 18 种语言 + 别名映射（vue/html → xml，c++ → cpp，c# → csharp 等），通过 marked renderer 把代码围栏渲染成带语言标记的高亮块
 - **`src/composables/useTypewriter.js`**：打字机引擎。把输出文本拆成「已定型前缀 stable（默认 400 字）」和「未定型尾巴 frontier」——前缀渲染一次后冻结缓存，流式期间每帧只渲染最近 400 字，渲染成本 O(stableLength) 而非 O(全文)
+- **`src/utils/pending.js`**：MindButler 待确认动作的纯工具函数（不依赖 Vue/浏览器 API，方便 node --test 单测）：`extractPendingId` 提取 `[[MB:pending=N]]` 标记中的 id；`stripMbMarker` 剥离全部标记；`parseLocalDateTime` 按字面量解析无时区 LocalDateTime（避免浏览器当 UTC 产生 8 小时偏移）；`formatDueAt` / `formatRecurrence` / `formatCountdown` / `pendingCounts` / `pendingDialogTitle` / `pendingPrimaryText` / `pendingDescription` / `confirmResultText` 负责展示文案与状态
+- **`src/components/TaskConfirmDialog.vue`**：Teleport 到 body 的确认弹窗，支持任务/记忆/混合三种模式、骨架屏加载、倒计时、确认/拒绝/过期状态机、Esc/Enter 快捷键、移动端底部 sheet 形态；确认后自动关闭并刷新聊天流（后端回音落库）
 
 ## 目录结构
 
@@ -109,6 +113,10 @@ Vue 3 · Vite · Element Plus · Vue Router 4 · Axios · marked · DOMPurify ·
 
 ## 变更记录
 
+  - **v7.3（2026-11-04）**：
+  - `api/user.js` 补全 MindButler P1 接口：任务 CRUD（`/user/tasks`，到期待办、游标分页、乐观锁完成/删除）、记忆 CRUD（`/user/memories`）、待确认动作（`/user/pending-actions` current / get / confirm / reject）
+  - 设置页新增「MindButler · 记忆与任务」卡片：任务列表（待办/已完成/已取消过滤、完成、删除）+ 记忆列表（删除）；完成任务走乐观锁（409 时拉单条任务拿最新 version 重试）
+  - `TaskConfirmDialog` 补全记忆条目渲染（key 标签、值、会话/全局 scope、长期/动态 memType，v7.4 兼容 `sessionId` 旧字段）；`parseLocalDateTime` 手动解析无时区 LocalDateTime，设置页任务日期避免 8 小时偏移
 - **v7.2（2026-11-03）**：
   - 聊天触发任务：解析 `/chat/ask-stream` 文案尾部的 `[[MB:pending=N]]`，SSE 结束后自动打开任务确认弹窗
   - `TaskConfirmDialog`：任务/记忆混合确认、倒计时、过期/已处理状态、确认/取消/稍后处理，移动端底部抽屉
@@ -118,7 +126,7 @@ Vue 3 · Vite · Element Plus · Vue Router 4 · Axios · marked · DOMPurify ·
   - 设计系统：LobeChat 风格双主题（`design.css` + `useTheme` + Element Plus 变量映射）
   - 组件拆分：`ChatView` 拆出 `ChatSidebar` / `ChatMessage` / `ChatComposer` / `StreamingMarkdown` / `WelcomeScreen`
   - 打字机引擎：`useTypewriter`（stable + frontier 两级渲染）+ `fence.js`（围栏平衡检测）
-  - 代码高亮：`highlight.js` 按需注册 17 种语言，代码块带语言标签
+  - 代码高亮：`highlight.js` 按需注册 18 种语言，代码块带语言标签
   - 流式 Markdown：`renderStreamingMarkdown` 未闭合围栏补临时闭合符，避免代码块闪烁
   - 侧边栏搜索、主题切换、消息模型标签、`409` 会话模型冲突处理
   - 新增 21 个单元测试（sse / fence / highlight）

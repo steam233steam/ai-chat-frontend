@@ -5,6 +5,7 @@
 ## P1 - 功能
 
 - [x] 消息落 MySQL，Redis 只做缓存（✅ 2026-10-22 完成：MySQL 主存储 + Redis 7 天热缓存，读未命中自动回源；前端接口行为不变）
+- [x] MindButler P1 接口（✅ 2026-11-04 前后端已对接：任务 `/user/tasks`（due/分页/单条/CRUD/乐观锁完成）、记忆 `/user/memories`、待确认动作 `/user/pending-actions`（current/get/confirm/reject）；前端设置页已展示任务/记忆管理）
 - [ ] 前端已就绪待对接：`/chat/models` 模型白名单接口（前端 2026-10-26 已接入 `getModels()`，发消息时可选传 `modelName`）
 - [ ] 前端已就绪待对接：`/chat/history` 游标分页（`limit` + `beforeId`，前端 2026-10-26 已按分页实现）
 - [ ] `/chat/ask-stream` 改为 POST（语义修正）
@@ -13,6 +14,13 @@
 - [ ] `/chat/ask` 返回 409 表示会话模型冲突（✅ 2026-10-28 前端已处理：409 时回滚未落库的用户消息、恢复输入框内容、刷新会话列表并展示真实锁定模型；后端需保证会话锁模型后返回 409 + 真实模型名）
 - [x] 统一 system prompt（✅ ChatClientConfig 统一系统提示词）
 - [x] 全局异常处理（✅ GlobalExceptionHandler + BusinessException）
+
+## P1.1 - MindButler 待办
+
+- [x] 聊天意图提取 + `[[MB:pending=N]]` 标记（✅ 2026-11-03 前端已解析并弹确认弹窗）
+- [x] 待确认动作落库 + current 恢复（✅ 前端刷新/切回会话调用 `/user/pending-actions/current`）
+- [ ] 记忆 `scope` 字段 v7.4 兼容：旧数据带 `sessionId`，新数据用 `scope`（前端已双字段兼容）
+- [ ] 任务完成幂等 + 版本冲突 409（✅ 前端已处理：列表没 version 时拉单条拿最新 version，409 提示刷新）
 
 ## P2 - 工程规范
 

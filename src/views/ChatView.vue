@@ -275,6 +275,15 @@ const abortActiveStream = () => {
   }
 }
 
+// P1.3：把当前会话 id 持久化到 localStorage，settings 页的记忆面板据此按会话过滤
+watch(
+  () => currentChatId.value,
+  (id) => {
+    if (id) localStorage.setItem('currentSessionId', id)
+  },
+  { immediate: true }
+)
+
 onMounted(async () => {
   // 加载用户信息
   try {
@@ -874,6 +883,12 @@ const deleteChat = async (sessionId) => {
   }
 
   chatSessions.value = chatSessions.value.filter(s => s.sessionId !== sessionId)
+
+  // P1.3 级联清理：会话删除时后端会清掉该会话的记忆/pending。
+  // 如果删的是当前会话，同步清掉本地存的 currentSessionId，避免 settings 面板拿到过期会话
+  if (localStorage.getItem('currentSessionId') === sessionId) {
+    localStorage.removeItem('currentSessionId')
+  }
 
   if (currentChatId.value === sessionId) {
     if (chatSessions.value.length > 0) {

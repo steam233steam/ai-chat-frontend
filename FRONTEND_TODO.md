@@ -4,6 +4,8 @@
 
 - [x] 删除冗余 Axios 实例（`api/index.js` 已移除，统一走 `api/request.js`）
 - [x] 聊天任务确认弹窗（✅ 2026-11-03：流式结束后解析 pending 标记，自动弹出 TaskConfirmDialog；确认/取消/稍后处理；刷新用 current 恢复）
+- [x] MindButler P1 接口封装（✅ 2026-11-04：任务/记忆/待确认动作全套 REST 接口封装进 `api/user.js`）
+- [x] 设置页任务/记忆管理（✅ 2026-11-04：任务过滤/完成/删除 + 记忆删除；完成任务走乐观锁 409 重试）
 - [ ] 引入 Pinia 状态管理（user / chat / settings store，减轻 ChatView 单文件压力）
 - [x] 设置页与后端打通（✅ 2026-10-17：读取 `/user/me`、修改昵称 `PUT /user/profile`；2026-10-28 增加暗色主题切换，展示服务信息）
 - [x] 长会话消息分页加载（✅ 2026-10-26：`/chat/history` 支持 `limit/beforeId` 游标，滚动到顶部加载更早记录）
@@ -26,6 +28,20 @@
 - [x] 暗色模式（✅ 2026-10-28：设计令牌 + `useTheme` 单例 + 设置页切换 + 首屏防闪烁）
 - [ ] PWA 支持（vite-plugin-pwa，离线可用 + 安装到桌面）
 - [ ] 长消息列表性能（虚拟滚动或分页）
+
+## 变更记录（2026-11-04）
+
+**MindButler P1 接口与任务/记忆管理**
+
+- `api/user.js` 补全 P1 接口：
+  - 任务：`getDueTasks` / `getTasks`（游标分页）/ `getTask` / `createTask` / `updateTask`（乐观锁）/ `completeTask`（once→done，daily/weekly 滚动到下次）/ `deleteTask`
+  - 记忆：`getMemories` / `exportMemories` / `getMemory` / `createMemory` / `updateMemory`（乐观锁）/ `deleteMemory`
+  - 待确认动作：`getCurrentPendingAction` / `getPendingAction` / `confirmPendingAction` / `rejectPendingAction`
+- 设置页新增「MindButler · 记忆与任务」卡片：
+  - 任务 tab：待办/已完成/已取消过滤 + 完成 + 删除；完成任务走乐观锁，列表没带 version 时先拉单条拿最新 version，409 提示刷新重试
+  - 记忆 tab：生效记忆列表 + 删除；展示 key / memType / scope（会话/全局，v7.4 兼容旧 `sessionId`）/ status / 到期时间
+  - 任务日期用 `formatDueAt`（`parseLocalDateTime` 字面量解析无时区 LocalDateTime），避免浏览器当 UTC 偏移 8 小时
+- `TaskConfirmDialog` 补全记忆条目渲染（key 标签、值、scope、长期/动态 memType），pending 数据为空时展示「确认已失效」空态
 
 ## 变更记录（2026-11-03）
 
@@ -107,6 +123,6 @@
 
 ## 验证
 
-- `npm test`：21/21 通过（9 个 SSE 解析 + 8 个代码围栏边界 + 4 个代码高亮）
+- `npm test`：31/31 通过（9 个 SSE 解析 + 8 个代码围栏边界 + 4 个代码高亮 + 10 个待确认动作）
 - `npm run build`：通过
 - Headless 浏览器实测：流式输出、停止生成、刷新历史、会话管理、登录容错均正常

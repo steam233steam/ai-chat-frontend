@@ -110,9 +110,12 @@ export const deleteTask = (id) => {
 
 // ---------- 用户记忆 /user/memories ----------
 
-/** 查询生效记忆（active 且未过期） */
-export const getMemories = (limit = 100) => {
-  return api.get('/user/memories', { params: { limit } })
+/** 查询生效记忆（active 且未过期）
+ * 传 sessionId 时只返回「全局 + 当前会话」的记忆（P1.3 会话隔离）；不传则全量。 */
+export const getMemories = (limit = 100, sessionId) => {
+  const params = { limit }
+  if (sessionId) params.sessionId = sessionId
+  return api.get('/user/memories', { params })
 }
 
 /** 导出全部记忆（含 superseded） */

@@ -223,7 +223,9 @@ const mbLoadTasks = async () => {
 const mbLoadMemories = async () => {
   mbLoading.value = true
   try {
-    const res = await getMemories()
+    // P1.3：带当前会话 id，面板只显示「全局 + 当前会话」的记忆，别的会话人设不串进来
+    const sessionId = localStorage.getItem('currentSessionId')
+    const res = await getMemories(100, sessionId || undefined)
     mbMemories.value = res.code === 200 ? (res.data || []) : []
   } catch (e) {
     console.error('加载记忆失败', e)
