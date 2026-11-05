@@ -999,9 +999,12 @@ onBeforeUnmount(() => {
 }
 
 @media (max-width: 640px) {
+  /* 移动端性能降级：去掉遮罩模糊，纯色背景已足够，降低 GPU 负担 */
   .mb-dialog-mask {
     align-items: flex-end;
     padding: 0;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
   }
 
   .mb-dialog-panel {

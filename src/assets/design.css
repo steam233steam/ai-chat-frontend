@@ -17,6 +17,7 @@ html[data-theme='light'] {
   --bg-surface-soft: #f4f5f7;
   --bg-sidebar: linear-gradient(160deg, #171821 0%, #1e1f30 60%, #232440 100%);
   --bg-header: rgba(255, 255, 255, 0.72);
+  --bg-header-solid: #ffffff;
 
   /* 文本 */
   --text-primary: #1d2033;
@@ -88,6 +89,7 @@ html[data-theme='dark'] {
   --bg-surface-soft: #1b1d28;
   --bg-sidebar: linear-gradient(160deg, #0c0d14 0%, #14151f 60%, #191a2b 100%);
   --bg-header: rgba(12, 13, 18, 0.7);
+  --bg-header-solid: #0c0d12;
 
   --text-primary: #f1f2f7;
   --text-secondary: #a3a7ba;

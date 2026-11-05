@@ -1,5 +1,6 @@
 <template>
   <motion.div
+    v-if="animate"
     :class="['message', message.role === 'user' ? 'user-message' : 'ai-message']"
     initial="hidden"
     :animate="message.role === 'ai' && message.streaming ? 'streaming' : 'shown'"
@@ -32,6 +33,39 @@
       </div>
     </div>
   </motion.div>
+
+  <!-- 移动端：历史消息批量载入不跑逐条入场动画（降低 GPU / JS 负担），直接渲染 -->
+  <div
+    v-else
+    :class="['message', 'message-static', message.role === 'user' ? 'user-message' : 'ai-message']"
+  >
+    <el-avatar :size="40" :class="message.role === 'user' ? 'user-avatar' : 'ai-avatar'">
+      <el-icon v-if="message.role === 'ai'"><ChatDotRound /></el-icon>
+      <span v-else>我</span>
+    </el-avatar>
+    <div class="message-content">
+      <div class="message-header">
+        <span class="sender-name">{{ message.role === 'user' ? '你' : 'AI 助手' }}</span>
+        <span v-if="message.role === 'ai' && message.model" class="message-model">{{ message.model }}</span>
+        <span v-if="message.streaming" class="message-streaming"><i></i>正在生成</span>
+        <span v-else-if="message.timestamp" class="message-time">{{ formatTime(message.timestamp) }}</span>
+      </div>
+      <div class="message-bubble">
+        <StreamingMarkdown
+          v-if="message.role === 'ai'"
+          :content="displayContent()"
+          :streaming="!!message.streaming"
+        />
+        <p v-else class="plain-text">{{ message.content }}</p>
+      </div>
+      <div class="message-actions" v-if="!message.streaming">
+        <el-button text size="small" @click="emit('copy', message.role === 'ai' ? displayContent() : message.content)">
+          <el-icon><CopyDocument /></el-icon>
+          复制
+        </el-button>
+      </div>
+    </div>
+  </div>
 </template>
 
 <script setup>
@@ -41,7 +75,9 @@ import StreamingMarkdown from '@/components/StreamingMarkdown.vue'
 import { stripMbMarker } from '@/utils/pending'
 
 const props = defineProps({
-  message: { type: Object, required: true }
+  message: { type: Object, required: true },
+  /** true 时走 motion-v 逐条入场动画（实时流式 / 桌面端历史）；false 时静态渲染（移动端历史批量载入） */
+  animate: { type: Boolean, default: true }
 })
 
 const emit = defineEmits(['copy'])
@@ -254,5 +290,10 @@ const formatTime = (timestamp) => {
   .message {
     max-width: 94%;
   }
+}
+
+/* 移动端静态渲染：不跑逐条入场动画（CSS + motion-v 都关），降低批量载入负担 */
+.message-static {
+  animation: none !important;
 }
 </style>

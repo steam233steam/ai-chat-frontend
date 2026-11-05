@@ -110,6 +110,7 @@
               v-for="msg in messages"
               :key="msg.id"
               :message="msg"
+              :animate="msg.id === activeAiMsg?.id || !isMobile"
               @copy="copyMessage"
             />
           </div>
@@ -643,16 +644,37 @@ const onPendingResolved = (payload) => {
   }
 
   if (action === 'confirmed') {
-    // 弹窗自身展示成功状态；后端只补一条固定短回执“已经定好”，
-    // reload 后聊天流里只多这一句，不再重复任务详情。
+    // 弹窗自身展示成功状态。确认成功后后端落库一条回执消息（"好的，都帮你设好了…"），
+    // 这里手动追加一条本地 AI 气泡即可，不必全量重拉历史重建 30 条消息（移动端性能）。
     loadSessions()
-    loadMessages()
+    appendReceiptMessage('好的，都帮你设好了。')
   } else if (action === 'rejected') {
     // 弹窗自身展示取消状态。拒绝是幂等静默成功，不落库新消息，只刷新会话列表
     loadSessions()
   } else if (action === 'expired') {
     // 弹窗自身会展示过期错误，这里不重复 toast。
   }
+}
+
+/**
+ * 确认/拒绝 pending 后，后端会往会话历史落库一条回执消息（如"好的，都帮你设好了…"）。
+ * 为了不在移动端触发全量历史重建（30 条 AnimatePresence + Markdown 重解析），
+ * 这里只增量追加一条本地气泡，真正的历史同步留给下次进页面 / 切会话时的 loadMessages。
+ */
+const appendReceiptMessage = (text) => {
+  const id = `local_${Date.now()}_${++msgIdCounter}`
+  messages.value.push({
+    id,
+    role: 'ai',
+    content: text,
+    model: currentSessionModel.value || selectedModel.value || null,
+    streaming: false,
+    timestamp: new Date()
+  })
+  nextTick(() => {
+    enhanceCodeBlocks(messageContainer.value)
+    scrollToBottom()
+  })
 }
 
 // “稍后处理”只收起弹窗，不拒绝后端 pending；底部提醒条可再次打开
@@ -1285,6 +1307,18 @@ const handleLogout = async () => {
 
   .decor-blob {
     display: none;
+  }
+
+  /* 移动端性能降级：去掉玻璃拟态 / 大模糊，换成纯色背景，降低 GPU 负担 */
+  .chat-header {
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    background: var(--bg-header-solid, var(--bg-base));
+  }
+
+  .sidebar-mask {
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
   }
 }
 </style>
