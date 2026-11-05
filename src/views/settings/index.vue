@@ -95,6 +95,7 @@
                   <el-tag v-if="task.recurrence && task.recurrence !== 'once'" size="small" type="info" effect="plain">{{ mbRecurrence(task.recurrence) }}</el-tag>
                   <el-tag v-if="task.overdue" size="small" type="danger" effect="light">已逾期</el-tag>
                   <el-tag size="small" :type="task.status === 'done' ? 'success' : task.status === 'cancelled' ? 'info' : 'warning'" effect="light">{{ mbStatus(task.status) }}</el-tag>
+                  <el-tag v-if="task.createdFromSession" size="small" type="info" effect="plain" :title="'发起会话：' + task.createdFromSession">会话创建</el-tag>
                 </div>
               </div>
               <div class="mb-row-actions">

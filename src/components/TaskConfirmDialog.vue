@@ -336,7 +336,10 @@ const onConfirm = async () => {
     closeAfter(1200)
   } catch (e) {
     const code = e?.code
-    if (code === 404 || code === 409) {
+    if (code === 400) {
+      // P1.5 payload 前置校验：空/非法 payload 后端直接 400
+      error.value = e?.message || '这条内容没有可保存的项，请回到聊天重新发送任务。'
+    } else if (code === 404 || code === 409) {
       localStatus.value = 'expired'
       error.value = '这条确认已过期或已处理，请回到聊天重新发送任务。'
       emit('resolved', {
