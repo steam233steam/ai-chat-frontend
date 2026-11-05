@@ -65,6 +65,11 @@
                 </article>
               </section>
 
+              <p v-if="tasks.length" class="mb-dialog-capability-note">
+                <el-icon><InfoFilled /></el-icon>
+                <span>当前只会保存到任务列表，不会主动发 QQ / 微信消息。</span>
+              </p>
+
               <section v-if="memories.length" class="mb-dialog-section">
                 <div class="mb-section-heading">
                   <span class="mb-section-title"><el-icon><User /></el-icon>记忆</span>
@@ -250,7 +255,7 @@ const actionLabel = (action) => {
 
 const memoryKeyLabel = (key) => {
   const map = {
-    style: '风格',
+    style: '回答风格',
     goal: '目标',
     schedule: '作息',
     relation: '称呼/关系'
@@ -267,7 +272,7 @@ const stopCountdown = () => {
 
 const startCountdown = () => {
   stopCountdown()
-  if (!props.data?.expiresAt) return
+  if (!props.data?.expiresAt || props.data?.status !== 'pending') return
   nowMs.value = Date.now()
   countdownTimer = setInterval(() => {
     nowMs.value = Date.now()
@@ -327,13 +332,14 @@ const onConfirm = async () => {
   try {
     const res = await confirmPendingAction(props.pendingId)
     localStatus.value = 'confirmed'
+    stopCountdown()
     successText.value = confirmResultText(res.data)
     emit('resolved', {
       action: 'confirmed',
       pendingId: props.pendingId,
       result: res.data
     })
-    closeAfter(1200)
+    closeAfter(450)
   } catch (e) {
     const code = e?.code
     if (code === 400) {
@@ -364,12 +370,13 @@ const onReject = async () => {
   try {
     await rejectPendingAction(props.pendingId)
     localStatus.value = 'rejected'
+    stopCountdown()
     successText.value = '已取消本次操作，不会保存任何内容。'
     emit('resolved', {
       action: 'rejected',
       pendingId: props.pendingId
     })
-    closeAfter(900)
+    closeAfter(300)
   } catch (e) {
     const code = e?.code
     if (code === 404 || code === 409) {
@@ -472,9 +479,11 @@ onBeforeUnmount(() => {
   align-items: center;
   justify-content: center;
   padding: 24px;
-  background: rgba(9, 11, 20, 0.56);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
+  /*
+   * 不用全屏 backdrop-filter：它会让弹窗下的长消息列表/渐变背景每帧重新合成，
+   * 低端桌面和移动端都会明显掉帧。半透明纯色遮罩已经足够聚焦。
+   */
+  background: rgba(8, 10, 18, 0.68);
 }
 
 .mb-dialog-panel {
@@ -487,7 +496,7 @@ onBeforeUnmount(() => {
   border-radius: 24px;
   background: var(--bg-surface);
   box-shadow: 0 30px 90px rgba(0, 0, 0, 0.32), 0 0 0 1px rgba(255, 255, 255, 0.04) inset;
-  animation: mbDialogIn 0.28s cubic-bezier(0.22, 1, 0.36, 1);
+  animation: mbDialogIn 0.18s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 .mb-dialog-header {
@@ -635,6 +644,21 @@ onBeforeUnmount(() => {
   color: var(--text-secondary);
   font-size: 13px;
   line-height: 1.65;
+}
+
+.mb-dialog-capability-note {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 10px 0 18px;
+  color: var(--text-tertiary);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.mb-dialog-capability-note .el-icon {
+  flex: 0 0 auto;
+  font-size: 13px;
 }
 
 .mb-dialog-section + .mb-dialog-section {
@@ -999,6 +1023,16 @@ onBeforeUnmount(() => {
 
 @keyframes mbSpin {
   to { transform: rotate(360deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mb-dialog-panel,
+  .mb-dialog-mask,
+  .mb-dialog-enter-active .mb-dialog-panel,
+  .mb-dialog-leave-active .mb-dialog-panel {
+    animation: none;
+    transition: none;
+  }
 }
 
 @media (max-width: 640px) {

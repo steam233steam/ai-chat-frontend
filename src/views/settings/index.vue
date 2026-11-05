@@ -67,80 +67,6 @@
         </el-form>
       </el-card>
 
-      <!-- MindButler 管理 -->
-      <el-card class="card">
-        <template #header>
-          <span class="card-title"><el-icon><Connection /></el-icon>MindButler · 记忆与任务</span>
-        </template>
-        <div class="mb-tabs">
-          <el-button-group size="small">
-            <el-button :type="mbTab === 'tasks' ? 'primary' : 'default'" @click="mbTab = 'tasks'">任务</el-button>
-            <el-button :type="mbTab === 'memories' ? 'primary' : 'default'" @click="mbTab = 'memories'">记忆</el-button>
-          </el-button-group>
-        </div>
-
-        <!-- 任务 tab -->
-        <div v-if="mbTab === 'tasks'" v-loading="mbLoading" class="mb-panel">
-          <div class="mb-panel-header">
-            <span class="mb-panel-title">我的任务（{{ mbTaskFilter }}）</span>
-            <el-button size="small" @click="mbLoadTasks">刷新</el-button>
-          </div>
-          <div v-if="mbTasks.length === 0" class="mb-empty">暂无任务</div>
-          <div v-else class="mb-list">
-            <div v-for="task in mbTasks" :key="task.id" :class="['mb-row', task.overdue ? 'mb-row-overdue' : '']">
-              <div class="mb-row-main">
-                <div class="mb-row-title">{{ task.title }}</div>
-                <div class="mb-row-meta">
-                  <span v-if="task.dueAt">{{ formatMbDate(task.dueAt) }}</span>
-                  <el-tag v-if="task.recurrence && task.recurrence !== 'once'" size="small" type="info" effect="plain">{{ mbRecurrence(task.recurrence) }}</el-tag>
-                  <el-tag v-if="task.overdue" size="small" type="danger" effect="light">已逾期</el-tag>
-                  <el-tag size="small" :type="task.status === 'done' ? 'success' : task.status === 'cancelled' ? 'info' : 'warning'" effect="light">{{ mbStatus(task.status) }}</el-tag>
-                  <el-tag v-if="task.createdFromSession" size="small" type="info" effect="plain" :title="'发起会话：' + task.createdFromSession">会话创建</el-tag>
-                </div>
-              </div>
-              <div class="mb-row-actions">
-                <el-button v-if="task.status === 'pending'" size="small" type="primary" link :loading="mbActing === `t${task.id}`" @click="mbCompleteTask(task)">完成</el-button>
-                <el-button size="small" type="danger" link :loading="mbActing === `td${task.id}`" @click="mbDeleteTask(task)">删除</el-button>
-              </div>
-            </div>
-          </div>
-          <div class="mb-filter">
-            <el-radio-group v-model="mbTaskFilter" size="small" @change="mbLoadTasks">
-              <el-radio-button value="pending">待办</el-radio-button>
-              <el-radio-button value="done">已完成</el-radio-button>
-              <el-radio-button value="cancelled">已取消</el-radio-button>
-            </el-radio-group>
-          </div>
-        </div>
-
-        <!-- 记忆 tab -->
-        <div v-if="mbTab === 'memories'" v-loading="mbLoading" class="mb-panel">
-          <div class="mb-panel-header">
-            <span class="mb-panel-title">生效记忆（{{ mbMemories.length }}）</span>
-            <el-button size="small" @click="mbLoadMemories">刷新</el-button>
-          </div>
-          <div v-if="mbMemories.length === 0" class="mb-empty">暂无记忆</div>
-          <div v-else class="mb-list">
-            <div v-for="mem in mbMemories" :key="mem.id" class="mb-row">
-              <div class="mb-row-main">
-                <div class="mb-row-title">{{ mem.content }}</div>
-                <div class="mb-row-meta">
-                  <el-tag size="small" type="info" effect="plain">{{ mem.memKey }}</el-tag>
-                  <el-tag v-if="mem.memType" size="small" effect="plain">{{ mem.memType }}</el-tag>
-                  <el-tag v-if="mem.scope === 'session' || mem.sessionId" size="small" type="warning" effect="plain" :title="mem.scope === 'session' || mem.sessionId ? '仅本会话生效' : ''">会话级</el-tag>
-                  <el-tag v-else size="small" effect="plain">全局</el-tag>
-                  <el-tag size="small" :type="mem.status === 'active' ? 'success' : 'info'" effect="light">{{ mem.status }}</el-tag>
-                  <span v-if="mem.expiresAt">到期 {{ formatMbDate(mem.expiresAt) }}</span>
-                </div>
-              </div>
-              <div class="mb-row-actions">
-                <el-button size="small" type="danger" link :loading="mbActing === `m${mem.id}`" @click="mbDeleteMemory(mem)">删除</el-button>
-              </div>
-            </div>
-          </div>
-        </div>
-      </el-card>
-
       <!-- 服务信息 -->
       <el-card class="card">
         <template #header>
@@ -171,6 +97,9 @@
             退出登录
           </el-button>
         </div>
+        <p class="hint">
+          会话、任务与记忆已统一到聊天侧边栏：会话级记忆跟随会话展示，全局记忆置顶，任务全账号共享。
+        </p>
       </el-card>
     </div>
   </div>
@@ -181,9 +110,8 @@ import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { ArrowLeft, Clock, SwitchButton, Sunny, User, Connection, MoreFilled } from '@element-plus/icons-vue'
-import { getUserInfo, updateProfile, logout, getTasks, completeTask, deleteTask, getMemories, deleteMemory, getTask } from '@/api/user'
+import { getUserInfo, updateProfile, logout } from '@/api/user'
 import { useTheme } from '@/composables/useTheme'
-import { formatDueAt } from '@/utils/pending'
 
 const router = useRouter()
 
@@ -192,107 +120,6 @@ const name = ref('')
 const loading = ref(false)
 const saving = ref(false)
 const loggingOut = ref(false)
-
-// ==================== MindButler 管理 ====================
-const mbTab = ref('tasks')
-const mbLoading = ref(false)
-const mbActing = ref(null)
-const mbTasks = ref([])
-const mbMemories = ref([])
-const mbTaskFilter = ref('pending')
-
-const formatMbDate = (val) => {
-  // 后端返回的是无时区 LocalDateTime 字符串，用字面量解析避免浏览器当 UTC 偏移 8 小时
-  return formatDueAt(val, { compact: true })
-}
-const mbRecurrence = (r) => ({ daily: '每日', weekly: '每周', monthly: '每月', once: '单次' }[r] || r)
-const mbStatus = (s) => ({ pending: '待办', done: '已完成', cancelled: '已取消' }[s] || s)
-
-const mbLoadTasks = async () => {
-  mbLoading.value = true
-  try {
-    const res = await getTasks(mbTaskFilter.value)
-    mbTasks.value = res.code === 200 ? (res.data || []) : []
-  } catch (e) {
-    console.error('加载任务失败', e)
-    mbTasks.value = []
-  } finally {
-    mbLoading.value = false
-  }
-}
-
-const mbLoadMemories = async () => {
-  mbLoading.value = true
-  try {
-    // 记忆面板是"管理我所有记忆"的入口，拉全量（不传 sessionId）。
-    // 会话级记忆的隔离在后端 QUERY 意图里做；这里若带 localStorage 的 currentSessionId，
-    // 各设备本地生成的会话 id 不同，会导致同账号跨设备面板数据不一致。
-    const res = await getMemories(100)
-    mbMemories.value = res.code === 200 ? (res.data || []) : []
-  } catch (e) {
-    console.error('加载记忆失败', e)
-    mbMemories.value = []
-  } finally {
-    mbLoading.value = false
-  }
-}
-
-const mbCompleteTask = async (task) => {
-  mbActing.value = `t${task.id}`
-  try {
-    // 列表接口不保证返回 version；乐观锁 409 时先拉单条任务拿最新 version 再完成
-    let version = task.version
-    if (version == null) {
-      const detail = await getTask(task.id)
-      if (detail.code === 200 && detail.data) {
-        version = detail.data.version
-      }
-    }
-    const res = await completeTask(task.id, version)
-    if (res.code === 200) {
-      ElMessage.success(task.recurrence === 'once' ? '任务已完成' : '已滚动到下一次')
-      mbLoadTasks()
-    } else {
-      ElMessage.warning(res.message || '操作失败')
-    }
-  } catch (e) {
-    // 409 多为版本过期，刷新任务列表即可
-    if (e?.code === 409) {
-      ElMessage.warning('任务状态已变化，请刷新后重试')
-      mbLoadTasks()
-    } else {
-      ElMessage.error(e?.message || '操作失败')
-    }
-  } finally {
-    mbActing.value = null
-  }
-}
-
-const mbDeleteTask = async (task) => {
-  mbActing.value = `td${task.id}`
-  try {
-    await deleteTask(task.id)
-    ElMessage.success('任务已删除')
-    mbLoadTasks()
-  } catch (e) {
-    ElMessage.error(e?.message || '删除失败')
-  } finally {
-    mbActing.value = null
-  }
-}
-
-const mbDeleteMemory = async (mem) => {
-  mbActing.value = `m${mem.id}`
-  try {
-    await deleteMemory(mem.id)
-    ElMessage.success('记忆已删除')
-    mbLoadMemories()
-  } catch (e) {
-    ElMessage.error(e?.message || '删除失败')
-  } finally {
-    mbActing.value = null
-  }
-}
 
 const { isDark } = useTheme()
 
@@ -383,8 +210,6 @@ const handleLogout = async () => {
 
 onMounted(() => {
   loadUser()
-  mbLoadTasks()
-  mbLoadMemories()
 })
 </script>
 
@@ -528,99 +353,6 @@ onMounted(() => {
   padding: 1px 5px;
   border-radius: 4px;
   font-size: 11px;
-}
-
-.mb-tabs {
-  margin-bottom: 14px;
-}
-
-.mb-panel {
-  min-height: 60px;
-}
-
-.mb-panel-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 10px;
-}
-
-.mb-panel-title {
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--text-secondary);
-}
-
-.mb-empty {
-  padding: 28px 0;
-  text-align: center;
-  color: var(--text-tertiary);
-  font-size: 13px;
-}
-
-.mb-list {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.mb-row {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 10px 14px;
-  border: 1px solid var(--border-subtle);
-  border-radius: 12px;
-  background: var(--bg-surface-soft);
-  transition: all 0.2s ease;
-}
-
-.mb-row:hover {
-  border-color: var(--color-primary-soft);
-  box-shadow: var(--shadow-sm);
-}
-
-.mb-row-overdue {
-  border-color: rgba(239, 68, 68, 0.35);
-  background: rgba(239, 68, 68, 0.05);
-}
-
-.mb-row-main {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
-}
-
-.mb-row-title {
-  font-size: 14px;
-  font-weight: 500;
-  color: var(--text-primary);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.mb-row-meta {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  flex-wrap: wrap;
-  font-size: 11px;
-  color: var(--text-tertiary);
-}
-
-.mb-row-actions {
-  flex-shrink: 0;
-  display: flex;
-  gap: 4px;
-}
-
-.mb-filter {
-  margin-top: 12px;
-  display: flex;
-  justify-content: center;
 }
 
 .actions {

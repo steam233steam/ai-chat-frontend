@@ -512,3 +512,26 @@ html[data-theme='dark'] .el-dropdown__popper {
 html[data-theme='dark'] .el-select-dropdown__item.is-hovering {
   background: var(--bg-surface-soft);
 }
+
+/* ============ 到期任务通知 ============ */
+.el-notification.mb-due-notification {
+  border: 1px solid var(--border-strong);
+  border-radius: 14px;
+  background: var(--bg-surface);
+  box-shadow: var(--shadow-lg);
+}
+
+.mb-due-notification .el-notification__title {
+  color: var(--text-primary);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.mb-due-notification .el-notification__content {
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.mb-due-notification .el-notification__icon {
+  color: var(--color-warning);
+}

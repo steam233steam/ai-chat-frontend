@@ -9,7 +9,34 @@
         <el-icon><Plus /></el-icon>
         新对话
       </el-button>
+
+      <div class="sidebar-tabs" role="tablist" aria-label="侧边栏视图">
+        <button
+          :class="['sidebar-tab', { active: activeTab === 'sessions' }]"
+          type="button"
+          role="tab"
+          :aria-selected="activeTab === 'sessions'"
+          @click="switchTab('sessions')"
+        >
+          <el-icon><ChatDotRound /></el-icon>
+          <span>会话</span>
+          <span v-if="sessions.length" class="tab-count">{{ sessions.length }}</span>
+        </button>
+        <button
+          :class="['sidebar-tab', { active: activeTab === 'tasks' }]"
+          type="button"
+          role="tab"
+          :aria-selected="activeTab === 'tasks'"
+          @click="switchTab('tasks')"
+        >
+          <el-icon><Calendar /></el-icon>
+          <span>任务</span>
+          <span v-if="taskCounts.pending" class="tab-count">{{ taskCounts.pending }}</span>
+        </button>
+      </div>
+
       <el-input
+        v-if="activeTab === 'sessions'"
         v-model="sessionQuery"
         placeholder="搜索对话..."
         :prefix-icon="Search"
@@ -18,65 +45,139 @@
       />
     </div>
 
-    <div class="sidebar-section-title">
-      <span>最近对话</span>
-      <span class="session-count">{{ filteredSessions.length }}</span>
-    </div>
-    <div class="chat-list">
-      <div
-        v-if="filteredSessions.length === 0"
-        class="empty-sessions"
-      >
-        <el-icon :size="30"><Search v-if="sessionQuery" /><ChatLineSquare v-else /></el-icon>
-        <p>{{ sessionQuery ? '没有匹配的对话' : '暂无对话记录' }}</p>
-        <span>{{ sessionQuery ? '换个关键词试试' : '点击上方“新对话”开始' }}</span>
+    <template v-if="activeTab === 'sessions'">
+      <div class="sidebar-section-title">
+        <span>最近对话</span>
+        <span class="session-count">{{ filteredSessions.length }}</span>
       </div>
-      <div
-        v-for="session in filteredSessions"
-        :key="session.sessionId"
-        :class="['chat-item', { active: currentChatId === session.sessionId }]"
-        @click="selectSession(session.sessionId)"
-        @contextmenu.prevent="showMenu(session)"
-      >
-        <el-icon class="chat-icon"><ChatDotRound /></el-icon>
-        <div class="chat-title-wrap">
-          <span class="chat-title" v-if="editingId !== session.sessionId">{{ session.title }}</span>
-          <span v-if="session.model" class="session-model-tag" :title="'锁定模型：' + session.model">{{ session.model }}</span>
+      <div class="chat-list">
+        <div v-if="memoriesLoading && memories.length === 0" class="sidebar-sync-hint">
+          正在同步记忆…
         </div>
 
-        <div v-if="editingId === session.sessionId" class="edit-box" @click.stop>
-          <input
-            v-model="editingTitle"
-            class="edit-input"
-            maxlength="50"
-            @keyup.enter="saveTitle(session.sessionId)"
-            @keyup.escape="cancelEditing"
+        <!-- 全局记忆：跨会话生效，固定放在会话列表上方 -->
+        <div v-if="globalMemories.length" class="memory-group global-memory-group">
+          <button
+            class="memory-group-head"
+            type="button"
+            :aria-expanded="globalMemoryOpen"
+            @click="toggleGlobalMemories"
+          >
+            <span class="memory-group-title">
+              <el-icon><Collection /></el-icon>
+              全局记忆
+              <span class="memory-count">{{ globalMemories.length }}</span>
+            </span>
+            <el-icon class="memory-caret" :class="{ expanded: globalMemoryOpen }"><ArrowRight /></el-icon>
+          </button>
+          <MemoryList
+            v-if="globalMemoryOpen"
+            :memories="globalMemories"
+            :acting-id="actingMemoryId"
+            @delete="forwardDeleteMemory"
           />
-          <span v-if="editingTitle.length > 40" class="title-limit-tip">{{ 50 - editingTitle.length }}</span>
-          <button class="save-btn" @click="saveTitle(session.sessionId)">
-            <el-icon><Check /></el-icon>
-          </button>
-          <button class="cancel-btn" @click="cancelEditing">
-            <el-icon><Close /></el-icon>
-          </button>
         </div>
 
-        <button class="more-btn" @click.stop="showMenu(session)">
-          <el-icon><More /></el-icon>
-        </button>
+        <div
+          v-if="filteredSessions.length === 0"
+          class="empty-sessions"
+        >
+          <el-icon :size="30"><Search v-if="sessionQuery" /><ChatLineSquare v-else /></el-icon>
+          <p>{{ sessionQuery ? '没有匹配的对话' : '暂无对话记录' }}</p>
+          <span>{{ sessionQuery ? '换个关键词试试' : '点击上方“新对话”开始' }}</span>
+        </div>
 
-        <div v-if="menuId === session.sessionId" class="context-menu" @click.stop>
-          <div class="context-menu-item" @click="beginEdit(session)">
-            <el-icon><Edit /></el-icon>
-            <span>重命名</span>
+        <div
+          v-for="session in filteredSessions"
+          :key="session.sessionId"
+          class="session-block"
+        >
+          <div
+            :class="['chat-item', { active: currentChatId === session.sessionId }]"
+            @click="selectSession(session.sessionId)"
+            @contextmenu.prevent="showMenu(session)"
+          >
+            <el-icon class="chat-icon"><ChatDotRound /></el-icon>
+            <div class="chat-title-wrap">
+              <div class="chat-title-row">
+                <span class="chat-title" v-if="editingId !== session.sessionId">{{ session.title }}</span>
+                <button
+                  v-if="memoryCountFor(session.sessionId)"
+                  :class="['session-memory-btn', { active: isMemoryExpanded(session) }]"
+                  type="button"
+                  :title="`本会话记忆 ${memoryCountFor(session.sessionId)} 条`"
+                  @click.stop="toggleSessionMemory(session)"
+                >
+                  <el-icon><Collection /></el-icon>
+                  <span>{{ memoryCountFor(session.sessionId) }}</span>
+                </button>
+              </div>
+              <span v-if="session.model" class="session-model-tag" :title="'锁定模型：' + session.model">{{ session.model }}</span>
+            </div>
+
+            <div v-if="editingId === session.sessionId" class="edit-box" @click.stop>
+              <input
+                v-model="editingTitle"
+                class="edit-input"
+                maxlength="50"
+                @keyup.enter="saveTitle(session.sessionId)"
+                @keyup.escape="cancelEditing"
+              />
+              <span v-if="editingTitle.length > 40" class="title-limit-tip">{{ 50 - editingTitle.length }}</span>
+              <button class="save-btn" @click="saveTitle(session.sessionId)">
+                <el-icon><Check /></el-icon>
+              </button>
+              <button class="cancel-btn" @click="cancelEditing">
+                <el-icon><Close /></el-icon>
+              </button>
+            </div>
+
+            <button class="more-btn" @click.stop="showMenu(session)">
+              <el-icon><More /></el-icon>
+            </button>
+
+            <div v-if="menuId === session.sessionId" class="context-menu" @click.stop>
+              <div class="context-menu-item" @click="beginEdit(session)">
+                <el-icon><Edit /></el-icon>
+                <span>重命名</span>
+              </div>
+              <div class="context-menu-item delete" @click="removeSession(session.sessionId)">
+                <el-icon><Delete /></el-icon>
+                <span>删除</span>
+              </div>
+            </div>
           </div>
-          <div class="context-menu-item delete" @click="removeSession(session.sessionId)">
-            <el-icon><Delete /></el-icon>
-            <span>删除</span>
+
+          <!-- 会话级记忆跟随当前会话展开，避免记忆和会话各自孤立管理 -->
+          <div v-if="isMemoryExpanded(session)" class="session-memory-panel" @click.stop>
+            <div class="session-memory-head">
+              <span>本节记忆</span>
+              <span class="memory-count">{{ memoryCountFor(session.sessionId) }}</span>
+              <button type="button" class="memory-collapse" @click="collapseSessionMemory">收起</button>
+            </div>
+            <MemoryList
+              :memories="memoriesForSession(session.sessionId)"
+              :acting-id="actingMemoryId"
+              @delete="forwardDeleteMemory"
+            />
           </div>
         </div>
       </div>
-    </div>
+    </template>
+
+    <SidebarTasks
+      v-else
+      v-model:status="taskFilter"
+      :tasks="taskList"
+      :counts="taskCounts"
+      :loading="tasksLoading"
+      :acting-task-id="actingTaskId"
+      :sessions="sessions"
+      @refresh="emit('refresh-tasks')"
+      @complete="forwardCompleteTask"
+      @delete="forwardDeleteTask"
+      @open-session="forwardOpenSession"
+    />
 
     <div class="sidebar-footer">
       <div class="sidebar-user-card">
@@ -100,23 +201,64 @@
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import {
-  ChatDotRound, Plus, Search, ChatLineSquare, More, Check, Close, Edit, Delete, Setting, SwitchButton
+  ArrowRight,
+  Calendar,
+  ChatDotRound,
+  ChatLineSquare,
+  Check,
+  Close,
+  Collection,
+  Delete,
+  Edit,
+  More,
+  Plus,
+  Search,
+  Setting,
+  SwitchButton
 } from '@element-plus/icons-vue'
 import { updateTitle } from '@/api/chat'
+import MemoryList from '@/components/MemoryList.vue'
+import SidebarTasks from '@/components/SidebarTasks.vue'
+import { sessionMemoryCounts as buildSessionMemoryCounts, splitMemories } from '@/utils/sidebar'
 
 const props = defineProps({
   sessions: { type: Array, default: () => [] },
   currentChatId: { type: String, default: null },
   userName: { type: String, default: '' },
-  visible: { type: Boolean, default: false }
+  visible: { type: Boolean, default: false },
+  tasksByStatus: {
+    type: Object,
+    default: () => ({ pending: [], done: [], cancelled: [] })
+  },
+  tasksLoading: { type: Boolean, default: false },
+  actingTaskId: { type: [Number, String], default: null },
+  memories: { type: Array, default: () => [] },
+  memoriesLoading: { type: Boolean, default: false },
+  actingMemoryId: { type: [Number, String], default: null }
 })
 
-const emit = defineEmits(['new-chat', 'select', 'rename', 'delete', 'settings', 'logout'])
+const emit = defineEmits([
+  'new-chat',
+  'select',
+  'rename',
+  'delete',
+  'settings',
+  'logout',
+  'refresh-tasks',
+  'complete-task',
+  'delete-task',
+  'refresh-memories',
+  'delete-memory'
+])
 
 const sessionQuery = ref('')
 const editingId = ref(null)
 const editingTitle = ref('')
 const menuId = ref(null)
+const activeTab = ref('sessions')
+const taskFilter = ref('pending')
+const expandedMemorySessionId = ref(null)
+const globalMemoryOpen = ref(false)
 
 const filteredSessions = computed(() => {
   const keyword = sessionQuery.value.trim().toLowerCase()
@@ -126,20 +268,88 @@ const filteredSessions = computed(() => {
   )
 })
 
+const memoryGroups = computed(() => splitMemories(props.memories))
+const globalMemories = computed(() => memoryGroups.value.global)
+const sessionMemoryCounts = computed(() => buildSessionMemoryCounts(props.memories))
+
+const taskCounts = computed(() => ({
+  pending: props.tasksByStatus?.pending?.length || 0,
+  done: props.tasksByStatus?.done?.length || 0,
+  cancelled: props.tasksByStatus?.cancelled?.length || 0
+}))
+const taskList = computed(() => props.tasksByStatus?.[taskFilter.value] || [])
+
 const hideMenu = () => {
   menuId.value = null
 }
 
 const handleNewChat = () => {
+  activeTab.value = 'sessions'
   sessionQuery.value = ''
+  expandedMemorySessionId.value = null
   hideMenu()
   emit('new-chat')
 }
 
 const selectSession = (sessionId) => {
+  expandedMemorySessionId.value = null
   hideMenu()
   emit('select', sessionId)
 }
+
+const switchTab = (tab) => {
+  if (activeTab.value === tab) return
+  cancelEditing()
+  activeTab.value = tab
+  hideMenu()
+  if (tab === 'tasks') emit('refresh-tasks')
+}
+
+const memoryCountFor = (sessionId) => sessionMemoryCounts.value[sessionId] || 0
+
+const memoriesForSession = (sessionId) => memoryGroups.value.bySession[sessionId] || []
+
+const isMemoryExpanded = (session) =>
+  props.currentChatId === session.sessionId &&
+  expandedMemorySessionId.value === session.sessionId &&
+  memoryCountFor(session.sessionId) > 0
+
+const toggleSessionMemory = (session) => {
+  const isOpen = expandedMemorySessionId.value === session.sessionId
+  if (props.currentChatId !== session.sessionId) emit('select', session.sessionId)
+  expandedMemorySessionId.value = isOpen ? null : session.sessionId
+  if (!isOpen) emit('refresh-memories')
+}
+
+const collapseSessionMemory = () => {
+  expandedMemorySessionId.value = null
+}
+
+const toggleGlobalMemories = () => {
+  globalMemoryOpen.value = !globalMemoryOpen.value
+  if (globalMemoryOpen.value) emit('refresh-memories')
+}
+
+const forwardCompleteTask = (task) => emit('complete-task', task)
+const forwardDeleteTask = (task) => emit('delete-task', task)
+const forwardDeleteMemory = (memory) => emit('delete-memory', memory)
+const forwardOpenSession = (sessionId) => {
+  if (!sessionId) return
+  cancelEditing()
+  activeTab.value = 'sessions'
+  expandedMemorySessionId.value = null
+  emit('select', sessionId)
+}
+
+/** 到期提醒点击后直接切到任务 tab；移动端由父组件负责打开抽屉。 */
+const openTasks = () => {
+  cancelEditing()
+  activeTab.value = 'tasks'
+  hideMenu()
+  emit('refresh-tasks')
+}
+
+defineExpose({ openTasks })
 
 const showMenu = (session) => {
   menuId.value = session.sessionId
@@ -240,6 +450,60 @@ onUnmounted(() => document.removeEventListener('click', hideMenu))
   box-shadow: 0 6px 20px rgba(99, 102, 241, 0.45);
 }
 
+.sidebar-tabs {
+  display: flex;
+  gap: 3px;
+  margin-top: 12px;
+  padding: 3px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  background: rgba(255, 255, 255, 0.045);
+}
+
+.sidebar-tab {
+  flex: 1;
+  min-width: 0;
+  height: 30px;
+  padding: 0 7px;
+  border: none;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--text-sidebar-soft);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.16s ease;
+}
+
+.sidebar-tab:hover {
+  color: var(--text-sidebar);
+  background: rgba(255, 255, 255, 0.07);
+}
+
+.sidebar-tab.active {
+  color: #fff;
+  background: linear-gradient(135deg, rgba(99, 102, 241, 0.75), rgba(139, 92, 246, 0.72));
+  box-shadow: 0 3px 10px rgba(99, 102, 241, 0.25);
+}
+
+.sidebar-tab .el-icon {
+  font-size: 13px;
+}
+
+.tab-count {
+  min-width: 15px;
+  padding: 0 4px;
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.16);
+  font-size: 9px;
+  line-height: 15px;
+  text-align: center;
+}
+
 .sidebar-section-title {
   display: flex;
   align-items: center;
@@ -303,6 +567,80 @@ onUnmounted(() => document.removeEventListener('click', hideMenu))
   padding: 4px 10px 16px;
 }
 
+.sidebar-sync-hint {
+  padding: 7px 10px;
+  color: var(--text-sidebar-soft);
+  font-size: 10px;
+  opacity: 0.75;
+}
+
+.global-memory-group {
+  margin: 2px 0 10px;
+  padding: 4px;
+  border-radius: 10px;
+  border: 1px solid rgba(129, 140, 248, 0.16);
+  background: rgba(129, 140, 248, 0.055);
+}
+
+.memory-group-head {
+  width: 100%;
+  min-height: 30px;
+  padding: 5px 7px;
+  border: none;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--text-sidebar);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  cursor: pointer;
+  transition: background 0.16s ease;
+}
+
+.memory-group-head:hover {
+  background: rgba(255, 255, 255, 0.055);
+}
+
+.memory-group-title {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.memory-group-title .el-icon {
+  color: rgba(165, 180, 252, 0.92);
+  font-size: 13px;
+}
+
+.memory-count {
+  min-width: 16px;
+  padding: 0 5px;
+  border-radius: 20px;
+  background: rgba(129, 140, 248, 0.18);
+  color: rgba(199, 210, 254, 0.95);
+  font-size: 9px;
+  line-height: 16px;
+  text-align: center;
+}
+
+.memory-caret {
+  color: var(--text-sidebar-soft);
+  font-size: 11px;
+  transition: transform 0.18s ease;
+}
+
+.memory-caret.expanded {
+  transform: rotate(90deg);
+}
+
+.global-memory-group :deep(.memory-list) {
+  margin-top: 5px;
+}
+
 .empty-sessions {
   display: flex;
   flex-direction: column;
@@ -341,6 +679,14 @@ onUnmounted(() => document.removeEventListener('click', hideMenu))
   position: relative;
   margin-bottom: 4px;
   border: 1px solid transparent;
+}
+
+.session-block {
+  margin-bottom: 4px;
+}
+
+.session-block .chat-item {
+  margin-bottom: 0;
 }
 
 .chat-item:hover {
@@ -461,9 +807,80 @@ onUnmounted(() => document.removeEventListener('click', hideMenu))
   min-width: 0;
 }
 
+.chat-title-row {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
 .chat-title-wrap .chat-title {
   flex: 0 1 auto;
   min-width: 0;
+}
+
+.chat-title-row .chat-title {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.session-memory-btn {
+  flex: 0 0 auto;
+  height: 18px;
+  padding: 0 5px;
+  border: 1px solid rgba(129, 140, 248, 0.24);
+  border-radius: 20px;
+  background: rgba(129, 140, 248, 0.1);
+  color: rgba(199, 210, 254, 0.9);
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  font-size: 9px;
+  cursor: pointer;
+  transition: all 0.16s ease;
+}
+
+.session-memory-btn:hover,
+.session-memory-btn.active {
+  border-color: rgba(165, 180, 252, 0.55);
+  background: rgba(129, 140, 248, 0.28);
+  color: #fff;
+}
+
+.session-memory-btn .el-icon {
+  font-size: 10px;
+}
+
+.session-memory-panel {
+  margin: 2px 4px 8px 34px;
+  padding: 8px;
+  border-left: 2px solid rgba(129, 140, 248, 0.42);
+  border-radius: 0 10px 10px 0;
+  background: rgba(255, 255, 255, 0.035);
+}
+
+.session-memory-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 6px;
+  color: var(--text-sidebar-soft);
+  font-size: 10px;
+  font-weight: 600;
+}
+
+.memory-collapse {
+  margin-left: auto;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--text-sidebar-soft);
+  font-size: 9px;
+  cursor: pointer;
+}
+
+.memory-collapse:hover {
+  color: #fff;
 }
 
 .session-model-tag {
@@ -648,6 +1065,10 @@ onUnmounted(() => document.removeEventListener('click', hideMenu))
   .context-menu {
     right: 44px;
     min-width: 120px;
+  }
+
+  .session-memory-panel {
+    margin-left: 30px;
   }
 }
 </style>

@@ -5,8 +5,10 @@
 - [x] 删除冗余 Axios 实例（`api/index.js` 已移除，统一走 `api/request.js`）
 - [x] 聊天任务确认弹窗（✅ 2026-11-03：流式结束后解析 pending 标记，自动弹出 TaskConfirmDialog；确认/取消/稍后处理；刷新用 current 恢复）
 - [x] MindButler P1 接口封装（✅ 2026-11-04：任务/记忆/待确认动作全套 REST 接口封装进 `api/user.js`）
-- [x] 设置页任务/记忆管理（✅ 2026-11-04：任务过滤/完成/删除 + 记忆删除；完成任务走乐观锁 409 重试）
-- [x] 记忆会话隔离 P1.3（✅ 2026-11-05：`getMemories` 带 `sessionId` 只返回「全局 + 当前会话」；历史页删除会话级联清理本地 `currentSessionId`，避免设置页拿到过期会话）
+- [x] 设置页任务/记忆管理（✅ 2026-11-04：任务过滤/完成/删除 + 记忆删除；完成任务走乐观锁 409 重试；P1.5 已迁移至聊天侧边栏）
+- [x] 侧边栏任务/记忆管理（✅ 2026-11-05：会话/任务双 tab；会话级记忆跟随会话展开、全局记忆置顶；任务支持筛选/完成/删除/来源会话跳转）
+- [x] 记忆会话隔离 P1.3（✅ 2026-11-05：`getMemories` 带 `sessionId` 只返回「全局 + 当前会话」；P1.5 侧栏改为拉全量后按 `sessionId` 分组，不再依赖 `localStorage.currentSessionId`）
+- [x] 到期任务应用内提醒（✅ 2026-11-05：页面可见时每 30 秒轮询 `/user/tasks/due`，只弹 10 分钟内到期任务，按 `taskId + dueAt` 去重，点击通知切到任务 tab）
 - [x] 登录流程简化（✅ 2026-11-05：`isNewUser` 由 `/user/me` 返回，移除独立 `/user/is-new-user` 接口调用；503 短信服务不可用引导改用密码登录；60s 冷却仅在后端 400"频繁"时启动）
 - [ ] 引入 Pinia 状态管理（user / chat / settings store，减轻 ChatView 单文件压力）
 - [x] 设置页与后端打通（✅ 2026-10-17：读取 `/user/me`、修改昵称 `PUT /user/profile`；2026-10-28 增加暗色主题切换，展示服务信息）
@@ -32,7 +34,37 @@
 - [ ] PWA 支持（vite-plugin-pwa，离线可用 + 安装到桌面）
 - [ ] 长消息列表性能（虚拟滚动或分页）
 
-## 变更记录（2026-11-05）
+## 变更记录（2026-11-05 反馈修复）
+
+**确认弹窗性能 / 人设回执 / 任务能力边界**
+
+- 新增 `src/utils/dueTasks.js`：到期通知选择、`taskId + dueAt` 去重、localStorage 记录清理
+- `ChatView` 每 30 秒轮询 `/user/tasks/due`（只在页面可见且没有 pending 弹窗时），10 分钟窗口、单轮最多 3 条，点击通知打开任务 tab
+- `ChatSidebar` 暴露 `openTasks()` 供通知点击跳转；通知样式走全局 `.mb-due-notification`
+- 新增 `tests/dueTasks.test.js`（4 个用例）；前端测试总数 41
+- 去掉确认弹窗的全屏 `backdrop-filter`（改为半透明纯色遮罩），面板入场动画 0.28s → 0.18s，支持 `prefers-reduced-motion`
+- 确认/取消成功后关闭等待从 1200ms/900ms 降到 450ms/300ms，并立即停止倒计时
+- 确认成功后不再硬编码“好的，都帮你设好了”，改为展示后端 `ConfirmResult.receipt`（实际写入历史的人设化回执）
+- 侧栏任务/记忆刷新推迟到 `requestIdleCallback`（600ms 超时兜底），避免确认瞬间 4 个请求 + 大列表重渲染
+- 回执气泡是纯文本，不再全量扫描消息容器挂代码复制按钮
+- 记忆删除文案改为“只影响后续回复，不会改写聊天记录”；`style` 标签改为“回答风格”
+- 任务弹窗与侧栏提示当前只做应用内记录，不会主动发 QQ / 微信
+- `npm test` 37/37，`npm run build` 通过
+
+**P1.5 侧边栏任务与记忆（Trae 式布局）**
+
+- `ChatSidebar` 增加「会话 / 任务」双 tab；任务 tab 展示待办/完成/取消筛选、完成、删除，并通过 `createdFromSession` 回到发起会话
+- 记忆按 `sessionId` 分组：会话行显示本会话记忆条数，当前会话可展开直接管理；全局记忆固定在会话列表上方
+- `ChatView` 统一加载三种任务状态 + 全量记忆，新增任务/记忆操作与刷新；确认 pending 成功、删除会话后同步刷新侧栏
+- 移除 `localStorage.currentSessionId` 跨页同步；设置页删除重复的 MindButler 管理卡片，历史页删除会话时不再维护本地会话 id
+- 新增 `MemoryList.vue` / `SidebarTasks.vue` / `utils/sidebar.js`；`npm test` 37/37 通过，`npm run build` 通过
+
+**应用内到期提醒（dueTasks）**
+
+- 新增 `src/utils/dueTasks.js`：到期通知选择、`taskId + dueAt` 去重、localStorage 记录清理
+- `ChatView` 每 30 秒轮询 `/user/tasks/due`（只在页面可见且没有 pending 弹窗时），10 分钟窗口、单轮最多 3 条，点击通知打开任务 tab
+- `ChatSidebar` 暴露 `openTasks()` 供通知点击跳转；通知样式走全局 `.mb-due-notification`
+- 新增 `tests/dueTasks.test.js`（4 个用例）；前端测试总数 41
 
 **登录流程简化与视觉重构**
 
@@ -144,6 +176,6 @@
 
 ## 验证
 
-- `npm test`：31/31 通过（9 个 SSE 解析 + 8 个代码围栏边界 + 4 个代码高亮 + 10 个待确认动作）
+- `npm test`：41/41 通过（9 个 SSE 解析 + 8 个代码围栏边界 + 4 个代码高亮 + 10 个待确认动作 + 6 个侧栏任务/记忆 + 4 个到期提醒）
 - `npm run build`：通过
 - Headless 浏览器实测：流式输出、停止生成、刷新历史、会话管理、登录容错均正常

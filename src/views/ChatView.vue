@@ -6,14 +6,26 @@
     <div v-if="isMobile && sidebarVisible" class="sidebar-mask" @click="closeSidebar"></div>
 
     <ChatSidebar
+      ref="chatSidebarRef"
       :sessions="chatSessions"
       :current-chat-id="currentChatId"
       :user-name="userInfo?.name || ''"
       :visible="sidebarVisible"
+      :tasks-by-status="tasksByStatus"
+      :tasks-loading="tasksLoading"
+      :acting-task-id="actingTaskId"
+      :memories="memories"
+      :memories-loading="memoriesLoading"
+      :acting-memory-id="actingMemoryId"
       @new-chat="newChat"
       @select="selectChat"
       @rename="handleRename"
       @delete="deleteChat"
+      @refresh-tasks="loadTasks"
+      @complete-task="handleCompleteTask"
+      @delete-task="handleDeleteTask"
+      @refresh-memories="loadMemories"
+      @delete-memory="handleDeleteMemory"
       @settings="router.push('/settings')"
       @logout="handleLogout"
     />
@@ -162,13 +174,25 @@
 <script setup>
 import { ref, reactive, onMounted, onUnmounted, computed, nextTick, watch } from 'vue'
 import { useRouter } from 'vue-router'
-import { ElMessage, ElMessageBox } from 'element-plus'
+import { ElMessage, ElMessageBox, ElNotification } from 'element-plus'
 import {
   Menu, Delete, ArrowDown, SwitchButton, Download, Loading,
   Clock, Setting, MoreFilled, Bell
 } from '@element-plus/icons-vue'
 import { sendMessageStream, getSessions, getHistory, clearSession, getModels } from '@/api/chat'
-import { getUserInfo, logout, getCurrentPendingAction, getPendingAction } from '@/api/user'
+import {
+  getUserInfo,
+  logout,
+  getCurrentPendingAction,
+  getPendingAction,
+  getTasks,
+  getTask,
+  completeTask,
+  deleteTask,
+  getMemories,
+  deleteMemory,
+  getDueTasks
+} from '@/api/user'
 import { enhanceCodeBlocks, exportChatAsJSON, exportChatAsText, copyText } from '@/utils/markdown'
 import ChatMessage from '@/components/ChatMessage.vue'
 import ChatSidebar from '@/components/ChatSidebar.vue'
@@ -180,9 +204,15 @@ import { AnimatePresence } from 'motion-v'
 import {
   extractPendingId,
   stripMbMarker,
+  formatDueAt,
   pendingCounts,
   pendingDialogTitle
 } from '@/utils/pending'
+import {
+  markDueNotified,
+  pruneNotified,
+  selectDueNotifications
+} from '@/utils/dueTasks'
 import { Moon, Sunny } from '@element-plus/icons-vue'
 
 const router = useRouter()
@@ -204,6 +234,32 @@ const windowWidth = ref(window.innerWidth)
 const showScrollBottom = ref(false)
 const isNearBottom = ref(true)
 const userInfo = ref(null)
+const chatSidebarRef = ref(null)
+
+// ==================== 到点提醒 ====================
+const DUE_POLL_INTERVAL_MS = 30_000
+const DUE_NOTIFIED_STORAGE_KEY = 'mb:notifiedDueTasks:v1'
+const dueNotified = ref({})
+let dueTimer = null
+let duePolling = false
+
+// ==================== 侧边栏任务 / 记忆 ====================
+const TASK_STATUSES = ['pending', 'done', 'cancelled']
+const TASKS_PAGE_SIZE = 100
+
+const tasksByStatus = reactive({
+  pending: [],
+  done: [],
+  cancelled: []
+})
+const tasksLoading = ref(false)
+const actingTaskId = ref(null)
+let tasksFetchToken = 0
+
+const memories = ref([])
+const memoriesLoading = ref(false)
+const actingMemoryId = ref(null)
+let memoriesFetchToken = 0
 
 // ==================== MindButler 待确认弹窗 ====================
 const pendingDialog = reactive({
@@ -276,15 +332,6 @@ const abortActiveStream = () => {
   }
 }
 
-// P1.3：把当前会话 id 持久化到 localStorage，settings 页的记忆面板据此按会话过滤
-watch(
-  () => currentChatId.value,
-  (id) => {
-    if (id) localStorage.setItem('currentSessionId', id)
-  },
-  { immediate: true }
-)
-
 onMounted(async () => {
   // 加载用户信息
   try {
@@ -300,6 +347,9 @@ onMounted(async () => {
   await loadChatId()
   await loadSessions()
   await loadMessages()
+  loadTasks()
+  loadMemories()
+  startDueReminder()
 
   window.addEventListener('resize', onResize)
   if (messageContainer.value) {
@@ -312,6 +362,7 @@ onUnmounted(() => {
   if (messageContainer.value) {
     messageContainer.value.removeEventListener('scroll', onScroll)
   }
+  stopDueReminder()
   abortActiveStream()
 })
 
@@ -387,6 +438,225 @@ const loadSessions = async () => {
   } catch (e) {
     console.error('加载会话列表失败', e)
     chatSessions.value = []
+  }
+}
+
+/**
+ * 侧边栏任务：一次拉齐三种状态，侧栏内切换筛选不再发请求。
+ * 用 allSettled，单个状态失败不影响其他列表；token 防止并发刷新时旧响应覆盖新数据。
+ */
+const loadTasks = async () => {
+  const token = ++tasksFetchToken
+  tasksLoading.value = true
+  try {
+    const results = await Promise.allSettled(
+      TASK_STATUSES.map((status) => getTasks(status, undefined, TASKS_PAGE_SIZE))
+    )
+    if (token !== tasksFetchToken) return
+
+    results.forEach((result, index) => {
+      const status = TASK_STATUSES[index]
+      if (result.status !== 'fulfilled') {
+        console.warn(`加载 ${status} 任务失败`, result.reason)
+        return
+      }
+      const res = result.value
+      tasksByStatus[status] = res?.code === 200 ? (res.data || []) : []
+    })
+  } catch (e) {
+    if (token === tasksFetchToken) console.error('加载任务失败', e)
+  } finally {
+    if (token === tasksFetchToken) tasksLoading.value = false
+  }
+}
+
+/**
+ * 侧边栏记忆：拉全量后按 sessionId 在组件里分组。
+ * 会话级记忆跟随会话展示，全局记忆单独固定；不再依赖 localStorage.currentSessionId。
+ */
+const loadMemories = async () => {
+  const token = ++memoriesFetchToken
+  memoriesLoading.value = true
+  try {
+    const res = await getMemories(100)
+    if (token !== memoriesFetchToken) return
+    if (res?.code === 200) memories.value = res.data || []
+  } catch (e) {
+    if (token === memoriesFetchToken) console.error('加载记忆失败', e)
+  } finally {
+    if (token === memoriesFetchToken) memoriesLoading.value = false
+  }
+}
+
+const loadDueNotified = () => {
+  try {
+    const raw = JSON.parse(localStorage.getItem(DUE_NOTIFIED_STORAGE_KEY) || '{}')
+    dueNotified.value = pruneNotified(raw)
+  } catch {
+    dueNotified.value = {}
+  }
+}
+
+const saveDueNotified = () => {
+  try {
+    localStorage.setItem(DUE_NOTIFIED_STORAGE_KEY, JSON.stringify(dueNotified.value))
+  } catch {
+    // 隐私模式/存储满时不影响提醒本身
+  }
+}
+
+const openTasksPanel = () => {
+  if (isMobile.value) sidebarVisible.value = true
+  chatSidebarRef.value?.openTasks?.()
+}
+
+const showDueNotification = (task) => {
+  const due = task?.dueAt ? formatDueAt(task.dueAt, { compact: true }) : ''
+  ElNotification({
+    title: '任务到期',
+    message: `${task?.title || '未命名任务'}${due ? ` · ${due}` : ''}`,
+    type: 'warning',
+    duration: 10_000,
+    position: 'bottom-right',
+    customClass: 'mb-due-notification',
+    onClick: openTasksPanel
+  })
+}
+
+/**
+ * 页面可见时每 30 秒查一次到期待办。
+ * 只弹 10 分钟内到期的任务，并按 taskId + dueAt 去重；超过 3 条留到下一轮，避免刷屏。
+ */
+const pollDueTasks = async () => {
+  if (duePolling || document.visibilityState !== 'visible' || pendingDialog.visible) return
+  duePolling = true
+  try {
+    const res = await getDueTasks(50)
+    if (res?.code !== 200) return
+    const now = Date.now()
+    const candidates = selectDueNotifications(res.data || [], {
+      now,
+      notified: dueNotified.value,
+      limit: 3
+    })
+    if (!candidates.length) return
+
+    let next = dueNotified.value
+    for (const task of candidates) {
+      next = markDueNotified(next, task, now)
+      showDueNotification(task)
+    }
+    dueNotified.value = pruneNotified(next, now)
+    saveDueNotified()
+  } catch (e) {
+    console.warn('检查到期任务失败', e)
+  } finally {
+    duePolling = false
+  }
+}
+
+const onVisibilityChange = () => {
+  if (document.visibilityState === 'visible') pollDueTasks()
+}
+
+const startDueReminder = () => {
+  loadDueNotified()
+  pollDueTasks()
+  if (!dueTimer) dueTimer = window.setInterval(pollDueTasks, DUE_POLL_INTERVAL_MS)
+  document.addEventListener('visibilitychange', onVisibilityChange)
+}
+
+const stopDueReminder = () => {
+  if (dueTimer) {
+    window.clearInterval(dueTimer)
+    dueTimer = null
+  }
+  document.removeEventListener('visibilitychange', onVisibilityChange)
+}
+
+const handleCompleteTask = async (task) => {
+  if (!task?.id || task.status !== 'pending' || actingTaskId.value != null) return
+  actingTaskId.value = task.id
+  try {
+    let version = task.version
+    if (version == null) {
+      const detail = await getTask(task.id)
+      version = detail?.code === 200 ? detail.data?.version : null
+    }
+    const res = await completeTask(task.id, version)
+    if (res?.code === 200) {
+      ElMessage.success(task.recurrence === 'once' ? '任务已完成' : '已滚动到下一次')
+      await loadTasks()
+    } else {
+      ElMessage.warning(res?.message || '操作失败')
+    }
+  } catch (e) {
+    if (e?.code === 409 || e?.code === 404) {
+      ElMessage.warning(e?.code === 409 ? '任务状态已变化，已刷新' : '任务已不存在，已刷新')
+      await loadTasks()
+    } else {
+      ElMessage.error(e?.message || '操作失败')
+    }
+  } finally {
+    actingTaskId.value = null
+  }
+}
+
+const handleDeleteTask = async (task) => {
+  if (!task?.id || actingTaskId.value != null) return
+  try {
+    await ElMessageBox.confirm(`确定删除任务「${task.title || '未命名任务'}」吗？`, '删除任务', {
+      confirmButtonText: '删除',
+      cancelButtonText: '取消',
+      type: 'warning'
+    })
+  } catch {
+    return
+  }
+
+  actingTaskId.value = task.id
+  try {
+    await deleteTask(task.id)
+    ElMessage.success('任务已删除')
+    await loadTasks()
+  } catch (e) {
+    if (e?.code === 404) {
+      ElMessage.warning('任务已不存在，已刷新')
+      await loadTasks()
+    } else {
+      ElMessage.error(e?.message || '删除失败')
+    }
+  } finally {
+    actingTaskId.value = null
+  }
+}
+
+const handleDeleteMemory = async (memory) => {
+  if (!memory?.id || actingMemoryId.value != null) return
+  try {
+    await ElMessageBox.confirm('删除后只影响后续回复，不会改写已经发生的聊天记录。确定继续吗？', '删除记忆', {
+      confirmButtonText: '删除',
+      cancelButtonText: '取消',
+      type: 'warning'
+    })
+  } catch {
+    return
+  }
+
+  actingMemoryId.value = memory.id
+  try {
+    await deleteMemory(memory.id)
+    memories.value = memories.value.filter((item) => item.id !== memory.id)
+    ElMessage.success('记忆已删除')
+  } catch (e) {
+    if (e?.code === 404) {
+      await loadMemories()
+      ElMessage.warning('记忆已不存在，已刷新')
+    } else {
+      ElMessage.error(e?.message || '删除失败')
+    }
+  } finally {
+    actingMemoryId.value = null
   }
 }
 
@@ -636,6 +906,14 @@ const restoreCurrentPending = async (sessionId) => {
   }
 }
 
+const scheduleIdle = (fn) => {
+  if (typeof window.requestIdleCallback === 'function') {
+    window.requestIdleCallback(fn, { timeout: 600 })
+  } else {
+    window.setTimeout(fn, 0)
+  }
+}
+
 const onPendingResolved = (payload) => {
   const action = payload?.action
   if (pendingDialog.data) {
@@ -644,24 +922,31 @@ const onPendingResolved = (payload) => {
   }
 
   if (action === 'confirmed') {
-    // 弹窗自身展示成功状态。确认成功后后端落库一条回执消息（"好的，都帮你设好了…"），
-    // 这里手动追加一条本地 AI 气泡即可，不必全量重拉历史重建 30 条消息（移动端性能）。
-    loadSessions()
-    appendReceiptMessage('好的，都帮你设好了。')
+    // 弹窗自身展示成功状态。后端把真正写入历史的人设化回执放在 result.receipt 里，
+    // 这里直接展示同一句话，不再硬编码“好的，都帮你设好了”。
+    // 侧栏刷新推迟到弹窗关闭动画之后，避免确认瞬间同时触发 4 个请求 + 大列表重渲染。
+    const receipt = payload?.result?.receipt
+    if (receipt) appendReceiptMessage(receipt)
+    scheduleIdle(() => {
+      loadSessions()
+      loadTasks()
+      loadMemories()
+    })
   } else if (action === 'rejected') {
     // 弹窗自身展示取消状态。拒绝是幂等静默成功，不落库新消息，只刷新会话列表
-    loadSessions()
+    scheduleIdle(loadSessions)
   } else if (action === 'expired') {
     // 弹窗自身会展示过期错误，这里不重复 toast。
   }
 }
 
 /**
- * 确认/拒绝 pending 后，后端会往会话历史落库一条回执消息（如"好的，都帮你设好了…"）。
- * 为了不在移动端触发全量历史重建（30 条 AnimatePresence + Markdown 重解析），
- * 这里只增量追加一条本地气泡，真正的历史同步留给下次进页面 / 切会话时的 loadMessages。
+ * 确认 pending 后，后端已经往会话历史落库了一条人设化短回执。
+ * 为了不触发全量历史重建（30 条 AnimatePresence + Markdown 重解析），这里只增量追加本地气泡；
+ * 气泡内容是后端返回的同一句回执，刷新后由 loadMessages 自然对齐。
  */
 const appendReceiptMessage = (text) => {
+  if (!text) return
   const id = `local_${Date.now()}_${++msgIdCounter}`
   messages.value.push({
     id,
@@ -671,10 +956,8 @@ const appendReceiptMessage = (text) => {
     streaming: false,
     timestamp: new Date()
   })
-  nextTick(() => {
-    enhanceCodeBlocks(messageContainer.value)
-    scrollToBottom()
-  })
+  // 回执是纯文本，不需要再扫描整个消息容器挂代码复制按钮；只滚动到底部。
+  nextTick(scrollToBottom)
 }
 
 // “稍后处理”只收起弹窗，不拒绝后端 pending；底部提醒条可再次打开
@@ -761,6 +1044,8 @@ const handleSend = async () => {
         }
         nextTick(() => enhanceCodeBlocks(messageContainer.value))
         loadSessions()
+        // 文本确认/提取后记忆可能已落库；侧栏记忆直接可见，流结束后同步一次
+        loadMemories()
       },
       (error) => handleStreamError(error, aiMsg, userMsgObj, userMsg),
       abortController.value.signal,
@@ -871,7 +1156,7 @@ const handleRename = ({ sessionId, title }) => {
 
 const deleteChat = async (sessionId) => {
   try {
-    await ElMessageBox.confirm('删除后该对话及其消息不可恢复，确定继续吗？', '提示', {
+    await ElMessageBox.confirm('删除后该对话、消息和本会话记忆不可恢复，确定继续吗？', '提示', {
       confirmButtonText: '确定',
       cancelButtonText: '取消',
       type: 'warning'
@@ -899,11 +1184,9 @@ const deleteChat = async (sessionId) => {
 
   chatSessions.value = chatSessions.value.filter(s => s.sessionId !== sessionId)
 
-  // P1.3 级联清理：会话删除时后端会清掉该会话的记忆/pending。
-  // 如果删的是当前会话，同步清掉本地存的 currentSessionId，避免 settings 面板拿到过期会话
-  if (localStorage.getItem('currentSessionId') === sessionId) {
-    localStorage.removeItem('currentSessionId')
-  }
+  // 后端删除会话会级联清理该会话的记忆与 pending，侧栏数据同步刷新，避免残留
+  loadTasks()
+  loadMemories()
 
   if (currentChatId.value === sessionId) {
     if (chatSessions.value.length > 0) {

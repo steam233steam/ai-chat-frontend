@@ -2,7 +2,7 @@
 
 [![Frontend CI](https://github.com/steam233steam/ai-chat-frontend/actions/workflows/ci.yml/badge.svg)](https://github.com/steam233steam/ai-chat-frontend/actions/workflows/ci.yml)
 
-基于 Vue 3 + Vite + Element Plus 的 AI 聊天系统前端，对接 Spring Boot 后端（API v7.2，MindButler P1：长期记忆 + 口语化任务 + 待确认动作）。
+基于 Vue 3 + Vite + Element Plus 的 AI 聊天系统前端，对接 Spring Boot 后端（API v7.9，MindButler P1：长期记忆 + 口语化任务 + 待确认动作 + 应用内到期提醒）。
 
 ## 功能特性
 
@@ -12,8 +12,8 @@
 - **代码高亮**：highlight.js 按需注册 18 种语言（js/ts/python/java/go/rust/c/cpp/csharp/bash/sql/json/xml/yaml/css/markdown/diff），未知语言回退纯文本转义；vue/html 映射 xml
 - **模型选择**：调用 `/chat/models` 拉取白名单模型，会话内模型锁定，消息气泡显示模型标签
 - **MindButler 待确认**：AI 命中"任务/记忆提取"意图时，聊天文案尾部追加 `[[MB:pending=N]]` 机器标记，自动弹出确认弹窗（任务 + 记忆）；展示/复制/导出前统一剥离标记；弹窗带倒计时、幂等确认、过期恢复；"稍后处理"保留底部提醒条可再次打开
-- **我的任务 / 记忆管理**：设置页提供任务列表（待办/已完成/已取消过滤、完成、删除）与记忆列表（删除），完成任务走乐观锁（409 时拉单条任务拿最新 version 重试）；记忆面板带当前会话 id，只显示「全局 + 当前会话」的记忆（P1.3 会话隔离，别的会话人设不串进来）
-- **会话管理**：新建 / 切换 / 重命名（限 50 字）/ 删除 / 导出（JSON、纯文本），侧边栏支持搜索对话
+- **侧边栏任务 / 记忆管理**：聊天侧边栏分「会话 / 任务」两个 tab；任务全账号共享，支持待办/完成/取消筛选、完成、删除，并可从 `createdFromSession` 跳回发起会话；会话级记忆以角标跟随会话展开，全局记忆固定在会话列表上方，删除会话会级联清理该会话记忆
+- **会话管理**：新建 / 切换 / 重命名（限 50 字）/ 删除 / 导出（JSON、纯文本），侧边栏支持搜索对话；会话行显示锁定模型与本会话记忆条数
 - **历史分页**：`limit` + `beforeId` 游标分页，滚动到顶部加载更早记录
 - **Markdown 渲染**：代码块带一键复制按钮 + 语言标签，Clipboard API 不可用时降级 `execCommand`，内容经 DOMPurify 净化
 - **暗色模式**：双主题（CSS 变量 + `html[data-theme]`），设置页与顶部工具栏均可切换，偏好持久化到 localStorage
@@ -21,6 +21,7 @@
 - **响应式布局**：PC 与移动端自适应，侧边栏可折叠
 - **离线提示**：网络状态检测，断网时顶部横幅提示
 - **聊天建任务**：聊天里说“明天下午三点提醒我开会”会命中意图提取，流式结束后自动弹出任务确认弹窗；确认后才写入任务列表，取消/稍后处理不会落库；刷新或切回会话会用 `/user/pending-actions/current` 恢复未处理提案
+- **应用内到期提醒**：页面可见时每 30 秒轮询 `/user/tasks/due`，只弹 10 分钟内到期任务，按 `taskId + dueAt` 去重，点击通知切到任务 tab；页面关闭/后台不保证提醒，外部 QQ/微信推送尚未接入
 
 ## 快速开始
 
@@ -86,7 +87,8 @@ npm run build      # 产物输出到 dist/
 - **`src/utils/codeHighlight.js`**：highlight.js 按需注册 18 种语言 + 别名映射（vue/html → xml，c++ → cpp，c# → csharp 等），通过 marked renderer 把代码围栏渲染成带语言标记的高亮块
 - **`src/composables/useTypewriter.js`**：打字机引擎。把输出文本拆成「已定型前缀 stable（默认 400 字）」和「未定型尾巴 frontier」——前缀渲染一次后冻结缓存，流式期间每帧只渲染最近 400 字，渲染成本 O(stableLength) 而非 O(全文)
 - **`src/utils/pending.js`**：MindButler 待确认动作的纯工具函数（不依赖 Vue/浏览器 API，方便 node --test 单测）：`extractPendingId` 提取 `[[MB:pending=N]]` 标记中的 id；`stripMbMarker` 剥离全部标记；`parseLocalDateTime` 按字面量解析无时区 LocalDateTime（避免浏览器当 UTC 产生 8 小时偏移）；`formatDueAt` / `formatRecurrence` / `formatCountdown` / `pendingCounts` / `pendingDialogTitle` / `pendingPrimaryText` / `pendingDescription` / `confirmResultText` 负责展示文案与状态
-- **`src/components/TaskConfirmDialog.vue`**：Teleport 到 body 的确认弹窗，支持任务/记忆/混合三种模式、骨架屏加载、倒计时、确认/拒绝/过期状态机、Esc/Enter 快捷键、移动端底部 sheet 形态；确认后自动关闭并刷新聊天流（后端回音落库）
+- **`src/utils/dueTasks.js`**：到期提醒纯函数（`taskId + dueAt` occurrence key、10 分钟通知窗口、去重/单轮限流、localStorage 记录清理）
+- **`src/components/TaskConfirmDialog.vue`**：Teleport 到 body 的确认弹窗，支持任务/记忆/混合三种模式、骨架屏加载、倒计时、确认/拒绝/过期状态机、Esc/Enter 快捷键、移动端底部 sheet 形态；确认后展示后端返回的人设化 `receipt`，不硬编码成功文案
 
 ## 目录结构
 
@@ -96,10 +98,11 @@ src/
 ├── router/       # 路由与登录守卫
 ├── views/        # chat / login / history / settings / 404 / layout
 ├── components/   # ChatSidebar / ChatMessage / ChatComposer / StreamingMarkdown /
-│                 # TaskConfirmDialog / WelcomeScreen / OfflineBanner
+│                 # TaskConfirmDialog / WelcomeScreen / OfflineBanner /
+│                 # MemoryList / SidebarTasks
 ├── composables/  # useNetwork / useTypewriter / useTheme
 ├── assets/       # design.css（设计 token，明暗双主题）+ main.css
-└── utils/        # markdown.js、pending.js、codeHighlight.js、fence.js、sse.js
+└── utils/        # markdown.js、pending.js、sidebar.js、dueTasks.js、codeHighlight.js、fence.js、sse.js
 ```
 
 **设计系统**（`src/assets/design.css`）：LobeChat 风格，定义品牌色、背景、文本、边框、气泡、代码块、阴影、圆角、玻璃拟态等 CSS 变量；`html[data-theme='dark']` 覆盖为深色值；`main.css` 把这些变量映射到 Element Plus 的 `--el-*` 变量，实现组件主题自动跟随。
@@ -110,16 +113,18 @@ src/
 npm test           # 单元测试（node --test）
 ```
 
-测试用例（31 个）：
+测试用例（41 个）：
 
 - `tests/sse.test.js`：SSE 解析器 9 个用例（前导空格保留、跨 chunk 分片、CRLF、注释行忽略、`[DONE]`、flush 截断、stop 后静默等）
 - `tests/fence.test.js`：围栏工具 8 个用例（平衡/未闭合、~~~ 支持、区间扫描、换行切分、不切开未闭合代码块、代码块闭合后继续推进等）
 - `tests/highlight.test.js`：高亮 4 个用例（已知语言输出 span、未知语言转义、vue/html 映射 xml、无语言纯文本）
 - `tests/pending.test.js`：待确认动作 10 个用例（标记提取/剥离、LocalDateTime 解析、日期/重复规则、倒计时、标题/按钮文案、确认结果、SSE 多行 data 提取）
+- `tests/sidebar.test.js`：侧栏任务/记忆 6 个用例（会话记忆分组、任务排序、时间/重复规则/来源会话、中文映射兜底）
+- `tests/dueTasks.test.js`：到期提醒 4 个用例（occurrence key、10 分钟窗口、去重/限流、记录清理）
 
 ## CI
 
-GitHub Actions 在每次 push 时执行 `npm ci`、`npm test`（上述 31 个用例）和 `npm run build`（`.github/workflows/ci.yml`）。
+GitHub Actions 在每次 push 时执行 `npm ci`、`npm test`（上述 41 个用例）和 `npm run build`（`.github/workflows/ci.yml`）。
 
 ## 技术栈
 
@@ -127,6 +132,14 @@ Vue 3 · Vite · Element Plus · Vue Router 4 · Axios · marked · DOMPurify ·
 
 ## 变更记录
 
+- **v7.5（2026-11-05）**：
+  - 任务/记忆管理从设置页迁到聊天侧边栏：新增「会话 / 任务」双 tab，任务支持状态筛选、完成、删除与来源会话跳转
+  - 记忆按会话分组：会话行显示本会话记忆条数，展开后直接管理；全局记忆固定在会话列表上方
+  - 移除 `localStorage.currentSessionId` 跨页同步，设置页不再维护第二套任务/记忆状态，减少跨页面/跨设备串数据
+  - 新增应用内到期提醒：`utils/dueTasks.js` + `tests/dueTasks.test.js`（4 个用例），页面可见时每 30 秒轮询 `/user/tasks/due`，10 分钟窗口内到期任务弹 `ElNotification`，按 `taskId + dueAt` 去重
+  - 确认弹窗性能优化：去掉全屏 `backdrop-filter`、面板入场动画 0.28s → 0.18s、支持 `prefers-reduced-motion`；确认/取消成功后关闭等待从 1200ms/900ms 降到 450ms/300ms
+  - 确认成功后展示后端 `ConfirmResult.receipt`（人设化回执），不再硬编码文案；侧栏任务/记忆刷新推迟到 `requestIdleCallback`（600ms 超时兜底）
+  - 新增 `utils/sidebar.js` + 6 个纯函数单测；前端测试总数 41；会话删除确认文案补充“本会话记忆”
 - **v7.4（2026-11-05）**：
   - 登录页视觉重构：玻璃拟态卡片 + 背景光斑、步骤切换左右滑动过渡、密码规则改为 4-32 位字母/数字/下划线
   - 新用户判定改为 `/user/me` 返回的 `isNewUser` 字段，移除独立 `/user/is-new-user` 调用；503 短信服务不可用引导改用密码登录，60s 冷却仅在后端 400"频繁"时启动

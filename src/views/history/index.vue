@@ -112,7 +112,7 @@ const goToChat = () => {
 
 const deleteChat = async (sessionId) => {
   try {
-    await ElMessageBox.confirm('删除后该对话及其消息不可恢复，确定继续吗？', '提示', {
+    await ElMessageBox.confirm('删除后该对话、消息和本会话记忆不可恢复，确定继续吗？', '提示', {
       confirmButtonText: '确定',
       cancelButtonText: '取消',
       type: 'warning'
@@ -124,10 +124,6 @@ const deleteChat = async (sessionId) => {
   try {
     await clearSession(sessionId)
     chatHistory.value = chatHistory.value.filter(c => c.sessionId !== sessionId)
-    // P1.3 级联清理：删的是当前会话时清掉本地存的 currentSessionId，避免 settings 面板拿到过期会话
-    if (localStorage.getItem('currentSessionId') === sessionId) {
-      localStorage.removeItem('currentSessionId')
-    }
     ElMessage.success('已删除')
   } catch (error) {
     console.error('删除失败', error)
