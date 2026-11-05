@@ -223,9 +223,10 @@ const mbLoadTasks = async () => {
 const mbLoadMemories = async () => {
   mbLoading.value = true
   try {
-    // P1.3：带当前会话 id，面板只显示「全局 + 当前会话」的记忆，别的会话人设不串进来
-    const sessionId = localStorage.getItem('currentSessionId')
-    const res = await getMemories(100, sessionId || undefined)
+    // 记忆面板是"管理我所有记忆"的入口，拉全量（不传 sessionId）。
+    // 会话级记忆的隔离在后端 QUERY 意图里做；这里若带 localStorage 的 currentSessionId，
+    // 各设备本地生成的会话 id 不同，会导致同账号跨设备面板数据不一致。
+    const res = await getMemories(100)
     mbMemories.value = res.code === 200 ? (res.data || []) : []
   } catch (e) {
     console.error('加载记忆失败', e)

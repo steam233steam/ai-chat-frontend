@@ -6,6 +6,8 @@
 - [x] 聊天任务确认弹窗（✅ 2026-11-03：流式结束后解析 pending 标记，自动弹出 TaskConfirmDialog；确认/取消/稍后处理；刷新用 current 恢复）
 - [x] MindButler P1 接口封装（✅ 2026-11-04：任务/记忆/待确认动作全套 REST 接口封装进 `api/user.js`）
 - [x] 设置页任务/记忆管理（✅ 2026-11-04：任务过滤/完成/删除 + 记忆删除；完成任务走乐观锁 409 重试）
+- [x] 记忆会话隔离 P1.3（✅ 2026-11-05：`getMemories` 带 `sessionId` 只返回「全局 + 当前会话」；历史页删除会话级联清理本地 `currentSessionId`，避免设置页拿到过期会话）
+- [x] 登录流程简化（✅ 2026-11-05：`isNewUser` 由 `/user/me` 返回，移除独立 `/user/is-new-user` 接口调用；503 短信服务不可用引导改用密码登录；60s 冷却仅在后端 400"频繁"时启动）
 - [ ] 引入 Pinia 状态管理（user / chat / settings store，减轻 ChatView 单文件压力）
 - [x] 设置页与后端打通（✅ 2026-10-17：读取 `/user/me`、修改昵称 `PUT /user/profile`；2026-10-28 增加暗色主题切换，展示服务信息）
 - [x] 长会话消息分页加载（✅ 2026-10-26：`/chat/history` 支持 `limit/beforeId` 游标，滚动到顶部加载更早记录）
@@ -26,8 +28,27 @@
 - [x] 会话标题搜索（✅ 2026-10-28：侧边栏本地过滤 + 空状态）
 - [x] 消息级模型标识（✅ 2026-10-28：消息头模型 chip，历史缺失时用会话锁模型兜底）
 - [x] 暗色模式（✅ 2026-10-28：设计令牌 + `useTheme` 单例 + 设置页切换 + 首屏防闪烁）
+- [x] 登录页 / 历史页视觉重构（✅ 2026-11-05：玻璃拟态 + 背景光斑 + 步骤滑动过渡 / 卡片化 + motion-v 入场 + 模型标签）
 - [ ] PWA 支持（vite-plugin-pwa，离线可用 + 安装到桌面）
 - [ ] 长消息列表性能（虚拟滚动或分页）
+
+## 变更记录（2026-11-05）
+
+**登录流程简化与视觉重构**
+
+- `login/index.vue` 视觉重构：玻璃拟态卡片 + 背景光斑、`Transition` 步骤切换左右滑动过渡、logo 漂浮动画、输入框跟随主题
+- 新用户判定改为 `/user/me` 返回的 `isNewUser` 字段，移除独立 `checkIsNewUser`（`/user/is-new-user`）调用
+- 密码规则改为 `^[A-Za-z0-9_]{4,32}$`（4-32 位字母/数字/下划线），提示文案同步更新
+- 503 短信服务不可用（dev 模式没接供应商）时引导改用密码登录，不进 60s 冷却；60s 冷却仅在后端 400 且 message 含"频繁"时启动
+- 设置密码步骤去掉昵称输入（昵称在设置页改），步骤提示改为"需重新获取一次验证码"
+- `history/index.vue` 视觉重构：卡片化 + motion-v 入场动画 + 模型标签 + 空状态 CTA + 删除时级联清理本地 `currentSessionId`
+- `request.js` 新增 `503` 错误文案（短信服务不可用，请改用密码登录或联系管理员）
+
+**记忆会话隔离 P1.3**
+
+- `api/user.js` 的 `getMemories` 增加 `sessionId` 参数，传 sessionId 时只返回「全局 + 当前会话」的记忆（P1.3 会话隔离），不传则全量
+- 设置页记忆面板带 `localStorage.currentSessionId`，`mbLoadMemories` 传当前会话 id
+- `ChatView` 维护 `localStorage.currentSessionId`：选中会话时 set，删除当前会话时 remove（避免设置页拿到过期会话）
 
 ## 变更记录（2026-11-04）
 

@@ -6,6 +6,8 @@
 
 - [x] 消息落 MySQL，Redis 只做缓存（✅ 2026-10-22 完成：MySQL 主存储 + Redis 7 天热缓存，读未命中自动回源；前端接口行为不变）
 - [x] MindButler P1 接口（✅ 2026-11-04 前后端已对接：任务 `/user/tasks`（due/分页/单条/CRUD/乐观锁完成）、记忆 `/user/memories`、待确认动作 `/user/pending-actions`（current/get/confirm/reject）；前端设置页已展示任务/记忆管理）
+- [x] 新用户判定改为 `/user/me` 返回 `isNewUser` 字段（✅ 2026-11-05 前后端已对接，前端移除独立 `/user/is-new-user` 调用；该接口可作已废弃处理）
+- [ ] 短信服务 503 兜底（✅ 前端已处理：`request.js` 新增 503 文案"短信服务暂不可用，请改用密码登录或联系管理员"，登录页 503 不进 60s 冷却；后端需保证 dev 模式没接供应商时 `/user/code` 返回 503）
 - [ ] 前端已就绪待对接：`/chat/models` 模型白名单接口（前端 2026-10-26 已接入 `getModels()`，发消息时可选传 `modelName`）
 - [ ] 前端已就绪待对接：`/chat/history` 游标分页（`limit` + `beforeId`，前端 2026-10-26 已按分页实现）
 - [ ] `/chat/ask-stream` 改为 POST（语义修正）
@@ -19,6 +21,7 @@
 
 - [x] 聊天意图提取 + `[[MB:pending=N]]` 标记（✅ 2026-11-03 前端已解析并弹确认弹窗）
 - [x] 待确认动作落库 + current 恢复（✅ 前端刷新/切回会话调用 `/user/pending-actions/current`）
+- [x] 记忆会话隔离 P1.3（✅ 2026-11-05 前后端已对接：`/user/memories` 带 `sessionId` 参数只返回「全局 + 当前会话」；前端 `getMemories(limit, sessionId)` 支持，设置页带 `currentSessionId`；历史页删除会话级联清理本地 `currentSessionId`）
 - [ ] 记忆 `scope` 字段 v7.4 兼容：旧数据带 `sessionId`，新数据用 `scope`（前端已双字段兼容）
 - [ ] 任务完成幂等 + 版本冲突 409（✅ 前端已处理：列表没 version 时拉单条拿最新 version，409 提示刷新）
 

@@ -6,13 +6,13 @@
 
 ## 功能特性
 
-- **登录注册**：手机号验证码登录，新用户首次登录强制设置密码（两次验证码流程）
+- **登录注册**：手机号验证码登录，新用户首次登录强制设置密码；`isNewUser` 由 `/user/me` 返回，登录页玻璃拟态 + 步骤切换过渡；503 短信服务不可用时引导改用密码登录
 - **流式对话**：SSE 打字机效果逐字显示，**已定型前缀 + 未定型尾巴**两级渲染，长消息流式期间每帧渲染成本恒定；未闭合代码块不会闪烁；支持随时停止生成
 - **打字机引擎**：LobeChat 式 buffer + queue + 匀速消费，30fps 吐字，已定型前缀渲染一次后冻结
 - **代码高亮**：highlight.js 按需注册 18 种语言（js/ts/python/java/go/rust/c/cpp/csharp/bash/sql/json/xml/yaml/css/markdown/diff），未知语言回退纯文本转义；vue/html 映射 xml
 - **模型选择**：调用 `/chat/models` 拉取白名单模型，会话内模型锁定，消息气泡显示模型标签
 - **MindButler 待确认**：AI 命中"任务/记忆提取"意图时，聊天文案尾部追加 `[[MB:pending=N]]` 机器标记，自动弹出确认弹窗（任务 + 记忆）；展示/复制/导出前统一剥离标记；弹窗带倒计时、幂等确认、过期恢复；"稍后处理"保留底部提醒条可再次打开
-- **我的任务 / 记忆管理**：设置页提供任务列表（待办/已完成/已取消过滤、完成、删除）与记忆列表（删除），完成任务走乐观锁（409 时拉单条任务拿最新 version 重试）
+- **我的任务 / 记忆管理**：设置页提供任务列表（待办/已完成/已取消过滤、完成、删除）与记忆列表（删除），完成任务走乐观锁（409 时拉单条任务拿最新 version 重试）；记忆面板带当前会话 id，只显示「全局 + 当前会话」的记忆（P1.3 会话隔离，别的会话人设不串进来）
 - **会话管理**：新建 / 切换 / 重命名（限 50 字）/ 删除 / 导出（JSON、纯文本），侧边栏支持搜索对话
 - **历史分页**：`limit` + `beforeId` 游标分页，滚动到顶部加载更早记录
 - **Markdown 渲染**：代码块带一键复制按钮 + 语言标签，Clipboard API 不可用时降级 `execCommand`，内容经 DOMPurify 净化
@@ -64,6 +64,20 @@ npm run build      # 产物输出到 dist/
   - `400/500` 等业务错误：以带 `code` 的 `business` 错误抛给调用方，由页面自行提示，避免全局弹窗干扰流式请求等场景
 - 兼容无 `code` 字段的旧接口（原样返回）
 
+## 登录接口封装
+
+`src/api/user.js` 中的登录 / 用户接口：
+
+| 接口 | 方法 | 说明 |
+|------|------|------|
+| `/user/code` | POST | 发送验证码（60s 冷却；503 短信服务未配置时提示改用密码登录） |
+| `/user/login` | POST | 验证码登录，返回 token |
+| `/user/login/password` | POST | 密码登录 |
+| `/user/set-password` | PUT | 设置密码（首次登录，需验证码 + 4-32 位字母/数字/下划线） |
+| `/user/me` | GET | 获取当前用户信息，含 `isNewUser` 字段（替代独立 `/user/is-new-user`） |
+| `/user/profile` | PUT | 修改昵称 |
+| `/user/logout` | POST | 登出 |
+
 ## 流式响应说明
 
 - **`src/utils/sse.js`**：极简 SSE 解析器 `SSEParser`，兼容 `\n\n`、`\r\n\r\n`、`\r\r` 事件分隔符；保留 `data:` 内容的原始空格（不 trim），避免模型输出英文单词粘连；`flush()` 处理连接截断时最后一段缺失空行的事件；收到 `[DONE]` 后自动 `stop()`
@@ -113,7 +127,13 @@ Vue 3 · Vite · Element Plus · Vue Router 4 · Axios · marked · DOMPurify ·
 
 ## 变更记录
 
-  - **v7.3（2026-11-04）**：
+- **v7.4（2026-11-05）**：
+  - 登录页视觉重构：玻璃拟态卡片 + 背景光斑、步骤切换左右滑动过渡、密码规则改为 4-32 位字母/数字/下划线
+  - 新用户判定改为 `/user/me` 返回的 `isNewUser` 字段，移除独立 `/user/is-new-user` 调用；503 短信服务不可用引导改用密码登录，60s 冷却仅在后端 400"频繁"时启动
+  - 历史页视觉重构：卡片化 + motion-v 入场动画 + 模型标签 + 删除时级联清理本地 `currentSessionId`
+  - `getMemories` 增加 `sessionId` 参数（P1.3 会话隔离），设置页记忆面板带当前会话 id，只显示「全局 + 当前会话」的记忆
+  - `request.js` 新增 `503` 错误文案（短信服务不可用）；`ChatView` 维护 `localStorage.currentSessionId` 供设置页使用
+- **v7.3（2026-11-04）**：
   - `api/user.js` 补全 MindButler P1 接口：任务 CRUD（`/user/tasks`，到期待办、游标分页、乐观锁完成/删除）、记忆 CRUD（`/user/memories`）、待确认动作（`/user/pending-actions` current / get / confirm / reject）
   - 设置页新增「MindButler · 记忆与任务」卡片：任务列表（待办/已完成/已取消过滤、完成、删除）+ 记忆列表（删除）；完成任务走乐观锁（409 时拉单条任务拿最新 version 重试）
   - `TaskConfirmDialog` 补全记忆条目渲染（key 标签、值、会话/全局 scope、长期/动态 memType，v7.4 兼容 `sessionId` 旧字段）；`parseLocalDateTime` 手动解析无时区 LocalDateTime，设置页任务日期避免 8 小时偏移
