@@ -643,27 +643,15 @@ const onPendingResolved = (payload) => {
   }
 
   if (action === 'confirmed') {
-    const result = payload?.result
-    if (result?.alreadyConfirmed) {
-      ElMessage.info('这条内容此前已经确认过了')
-    } else {
-      const taskCount = result?.tasks?.length ?? pendingCounts(pendingDialog.data).tasks
-      const memoryCount = result?.memories?.length ?? pendingCounts(pendingDialog.data).memories
-      const parts = []
-      if (taskCount > 0) parts.push(`${taskCount} 个任务`)
-      if (memoryCount > 0) parts.push(`${memoryCount} 条记忆`)
-      ElMessage.success(parts.length ? `已保存 ${parts.join('、')}` : '已确认')
-    }
-    // P1.1b：确认成功后后端把"好的，都帮你设好了…"反馈文案作为 assistant 消息落库到本会话，
-    // 重新拉取历史让这条回音出现在聊天流里，同时刷新会话列表
+    // 弹窗自身展示成功状态；后端只补一条固定短回执“已经定好”，
+    // reload 后聊天流里只多这一句，不再重复任务详情。
     loadSessions()
     loadMessages()
   } else if (action === 'rejected') {
-    ElMessage.info('已取消本次操作')
-    // 拒绝为幂等静默成功，不会落库新消息，只刷新会话列表
+    // 弹窗自身展示取消状态。拒绝是幂等静默成功，不落库新消息，只刷新会话列表
     loadSessions()
   } else if (action === 'expired') {
-    ElMessage.warning('这条确认已失效，请重新发送任务')
+    // 弹窗自身会展示过期错误，这里不重复 toast。
   }
 }
 
@@ -742,6 +730,11 @@ const handleSend = async () => {
         const pendingId = extractPendingId(aiMsg.content)
         if (pendingId != null) {
           aiMsg.content = stripMbMarker(aiMsg.content)
+          // 若剥离机器标记后没有任何可展示文案（后端只发 [[MB:pending=N]] 的兜底场景），
+          // 移除这条临时 AI 气泡，聊天流里只保留用户消息和确认弹窗，不留空气泡。
+          if (!aiMsg.content.trim()) {
+            messages.value = messages.value.filter(m => m.id !== aiMsg.id)
+          }
           openPendingDialog(pendingId)
         }
         nextTick(() => enhanceCodeBlocks(messageContainer.value))
