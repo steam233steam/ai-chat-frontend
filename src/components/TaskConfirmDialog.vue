@@ -347,6 +347,7 @@ const onConfirm = async () => {
       error.value = e?.message || '这条内容没有可保存的项，请回到聊天重新发送任务。'
     } else if (code === 404 || code === 409) {
       localStatus.value = 'expired'
+      stopCountdown()
       error.value = '这条确认已过期或已处理，请回到聊天重新发送任务。'
       emit('resolved', {
         action: 'expired',
