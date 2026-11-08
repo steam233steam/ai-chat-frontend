@@ -189,7 +189,9 @@
       <div v-if="editForm.actionType === 'push'" class="edit-field">
         <label>推送到哪</label>
         <el-select v-model="editForm.pushChannel" style="width: 100%">
-          <el-option label="ntfy（安卓，推荐）" value="ntfy" />
+          <el-option label="Server酱（微信通知，推荐）" value="serverchan" />
+          <el-option label="PushPlus（微信通知）" value="pushplus" />
+          <el-option label="ntfy（安卓 App）" value="ntfy" />
           <el-option label="Bark（iOS）" value="bark" />
           <el-option label="企业微信群机器人" value="wecom" />
         </el-select>
@@ -198,6 +200,18 @@
           v-model="editForm.pushTopic"
           style="margin-top: 8px"
           placeholder="主题，例如 mindbutler-233"
+        />
+        <el-input
+          v-else-if="editForm.pushChannel === 'serverchan'"
+          v-model="editForm.pushKey"
+          style="margin-top: 8px"
+          placeholder="SendKey，SCT 开头"
+        />
+        <el-input
+          v-else-if="editForm.pushChannel === 'pushplus'"
+          v-model="editForm.pushKey"
+          style="margin-top: 8px"
+          placeholder="PushPlus 的 token"
         />
         <el-input
           v-else
@@ -361,9 +375,10 @@ const editForm = ref({
   webhookUrl: '',
   mcpTool: '',
   mcpArg: '',
-  pushChannel: 'ntfy',
+  pushChannel: 'serverchan',
   pushTopic: '',
-  pushTarget: ''
+  pushTarget: '',
+  pushKey: ''
 })
 
 const weekdays = [
@@ -381,8 +396,10 @@ const WEEKDAY_LABELS = Object.fromEntries(weekdays.map((d) => [d.value, d.label]
 const ACTION_NAMES = { notify: '站内提醒', webhook: 'Webhook', mcp: 'AI 查询', push: '手机推送' }
 const actionName = (value) => ACTION_NAMES[value] || value || '-'
 
-const PUSH_CHANNEL_NAMES = { ntfy: 'ntfy', bark: 'Bark', wecom: '企业微信' }
+const PUSH_CHANNEL_NAMES = { serverchan: '微信', pushplus: '微信', ntfy: 'ntfy', bark: 'Bark', wecom: '企业微信' }
 const pushHint = computed(() => {
+  if (editForm.value.pushChannel === 'serverchan') return '微信扫码登录 sct.ftqq.com 就能拿到 SendKey，到点会以微信服务号消息推给你，不用装任何 App。'
+  if (editForm.value.pushChannel === 'pushplus') return '微信扫码登录 pushplus.plus 拿 token，同样是微信消息，不用装 App。'
   if (editForm.value.pushChannel === 'bark') return 'iOS 装 Bark，把 App 里给你的地址粘到这里。'
   if (editForm.value.pushChannel === 'wecom') return '企业微信群里加「群机器人」，把它的 webhook 地址粘到这里。'
   return '安卓装 ntfy App，订阅同一个主题名；到点会以横幅通知弹出。'
@@ -682,6 +699,12 @@ const buildActionConfig = (form) => {
     if (form.pushChannel === 'ntfy') {
       return JSON.stringify({ channel: 'ntfy', server: 'https://ntfy.sh', topic: form.pushTopic.trim() })
     }
+    if (form.pushChannel === 'serverchan') {
+      return JSON.stringify({ channel: 'serverchan', sendkey: (form.pushKey || '').trim() })
+    }
+    if (form.pushChannel === 'pushplus') {
+      return JSON.stringify({ channel: 'pushplus', token: (form.pushKey || '').trim() })
+    }
     return JSON.stringify({ channel: form.pushChannel, target: form.pushTarget.trim() })
   }
   if (form.actionType === 'mcp') {
@@ -707,9 +730,10 @@ const readActionConfig = (task) => {
     try {
       const cfg = JSON.parse(task.actionConfig || '{}')
       return {
-        pushChannel: cfg.channel || 'ntfy',
+        pushChannel: cfg.channel || 'serverchan',
         pushTopic: cfg.topic || '',
-        pushTarget: cfg.target || ''
+        pushTarget: cfg.target || '',
+        pushKey: cfg.sendkey || cfg.token || ''
       }
     } catch (e) {
       return { pushChannel: 'ntfy', pushTopic: '', pushTarget: '' }
@@ -760,6 +784,11 @@ const handleSave = async () => {
     if (form.pushChannel === 'ntfy') {
       if (!/^[A-Za-z0-9_-]{1,64}$/.test((form.pushTopic || '').trim())) {
         ElMessage.warning('主题只能用字母、数字、下划线或短横线，例如 mindbutler-233')
+        return
+      }
+    } else if (form.pushChannel === 'serverchan' || form.pushChannel === 'pushplus') {
+      if (!/^[A-Za-z0-9]{6,64}$/.test((form.pushKey || '').trim())) {
+        ElMessage.warning(form.pushChannel === 'serverchan' ? 'SendKey 是 SCT 开头的一串字符' : 'PushPlus 的 token 是一串字符')
         return
       }
     } else if (!/^https?:\/\//.test(form.pushTarget || '')) {
