@@ -34,11 +34,11 @@
         </div>
       </div>
 
-      <!-- 步骤切换过渡 -->
-      <Transition :name="stepTransition" mode="out-in">
+      <!-- 步骤面板：1/3 常驻（v-show 切换，避免重建表单），2/4 用到时再挂载 -->
+      <div class="login-step-panels">
         <!-- 步骤1: 手机号 + 验证码登录 -->
         <el-form
-          v-if="currentStep === 1"
+          v-show="currentStep === 1"
           ref="phoneFormRef"
           :model="phoneForm"
           :rules="phoneRules"
@@ -95,7 +95,7 @@
 
         <!-- 步骤2: 新用户设置密码 -->
         <el-form
-          v-else-if="currentStep === 2"
+          v-if="currentStep === 2"
           ref="passwordFormRef"
           :model="passwordForm"
           :rules="passwordRules"
@@ -174,7 +174,8 @@
 
         <!-- 步骤3: 密码登录 -->
         <el-form
-          v-else-if="currentStep === 3"
+          v-if="passwordFormMounted"
+          v-show="currentStep === 3"
           ref="passwordLoginFormRef"
           :model="passwordLoginForm"
           :rules="passwordLoginRules"
@@ -226,7 +227,7 @@
 
         <!-- 步骤4: 手机号 + 密码注册（不需要短信验证码） -->
         <el-form
-          v-else-if="currentStep === 4"
+          v-if="currentStep === 4"
           ref="registerFormRef"
           :model="registerForm"
           :rules="registerRules"
@@ -293,13 +294,13 @@
             <el-button link @click="currentStep = 3">去登录</el-button>
           </div>
         </el-form>
-      </Transition>
+      </div>
     </div>
   </div>
 </template>
 
 <script setup>
-import { ref, reactive, onUnmounted } from 'vue'
+import { ref, reactive, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useTheme } from '@/composables/useTheme'
 import { ElMessage } from 'element-plus'
@@ -318,8 +319,17 @@ const { isDark, toggle } = useTheme()
 const loading = ref(false)
 const currentStep = ref(1)
 const countdown = ref(0)
-const stepTransition = ref('step-slide-left')
+const stepTransition = ref('')          // 已废弃：保留空变量仅为兼容旧引用
+const passwordFormMounted = ref(false)  // 密码登录面板是否已挂载
 let timer = null
+
+// 首屏渲染完成后空闲时预挂载「密码登录」面板：切过去是直接显示，不用现场创建表单
+onMounted(() => {
+  const idle = window.requestIdleCallback || ((fn) => setTimeout(fn, 1200))
+  idle(() => {
+    passwordFormMounted.value = true
+  })
+})
 
 const phoneFormRef = ref()
 const passwordFormRef = ref()
@@ -590,17 +600,16 @@ const sendCode = async () => {
 }
 
 const switchToPasswordLogin = () => {
-  stepTransition.value = 'step-slide-left'
+  passwordFormMounted.value = true
   currentStep.value = 3
 }
 
 const switchToCodeLogin = () => {
-  stepTransition.value = 'step-slide-right'
   currentStep.value = 1
 }
 
 const switchToRegister = () => {
-  stepTransition.value = 'step-slide-left'
+  passwordFormMounted.value = true
   currentStep.value = 4
 }
 
@@ -933,32 +942,9 @@ onUnmounted(() => {
   font-weight: 500;
 }
 
-/* 步骤切换过渡 */
-.step-slide-left-enter-active,
-.step-slide-left-leave-active,
-.step-slide-right-enter-active,
-.step-slide-right-leave-active {
-  transition: all 0.3s cubic-bezier(0.22, 1, 0.36, 1);
-}
-
-.step-slide-left-enter-from {
-  opacity: 0;
-  transform: translateX(28px);
-}
-
-.step-slide-left-leave-to {
-  opacity: 0;
-  transform: translateX(-28px);
-}
-
-.step-slide-right-enter-from {
-  opacity: 0;
-  transform: translateX(-28px);
-}
-
-.step-slide-right-leave-to {
-  opacity: 0;
-  transform: translateX(28px);
+/* 步骤面板：1/3 用 v-show 常驻，切换不重建 DOM */
+.login-step-panels {
+  position: relative;
 }
 
 /* 输入框样式跟随主题 */
