@@ -38,7 +38,8 @@ test('splitMemories / sessionMemoryCounts 兼容空数组', () => {
 })
 
 test('记忆与任务展示文案有中文映射和兜底', () => {
-  assert.equal(memoryKeyLabel('goal'), '目标')
+  assert.equal(memoryKeyLabel('fact'), '事实')
+  assert.equal(memoryKeyLabel('style'), '回答风格')
   assert.equal(memoryKeyLabel('custom'), 'custom')
   assert.equal(memoryKeyLabel(null), '记忆')
   assert.equal(memoryTypeLabel('stable'), '长期')
