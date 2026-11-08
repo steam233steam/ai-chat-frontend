@@ -36,9 +36,6 @@ export default defineConfig(({ mode }) => {
               if (id.includes('/vue/') || id.includes('/vue-router/') || id.includes('@vue')) {
                 return 'vue-vendor'
               }
-              if (id.includes('/element-plus/') || id.includes('@element-plus')) {
-                return 'element-plus'
-              }
               if (id.includes('/marked/') || id.includes('/dompurify/') || id.includes('/purify/') || id.includes('/highlight.js/')) {
                 return 'markdown'
               }

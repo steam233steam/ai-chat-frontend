@@ -1061,18 +1061,22 @@ const handleLogout = async () => {
       cancelButtonText: '取消',
       type: 'warning'
     })
-
-    await logout()
-    localStorage.removeItem('token')
-    localStorage.removeItem('loginUser')
-    userInfo.value = null
-    ElMessage.success('已退出登录')
-    router.push('/login')
-  } catch (e) {
-    if (e !== 'cancel') {
-      console.error('登出失败', e)
-    }
+  } catch {
+    return // 用户取消
   }
+
+  // 接口失败（token 过期 / 网络异常）也必须完成本地登出，否则用户会卡在已登录界面
+  try {
+    await logout()
+  } catch (e) {
+    console.warn('登出接口调用失败，继续本地登出', e)
+  }
+
+  localStorage.removeItem('token')
+  localStorage.removeItem('loginUser')
+  userInfo.value = null
+  ElMessage.success('已退出登录')
+  await router.replace('/login')
 }
 </script>
 

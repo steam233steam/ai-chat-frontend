@@ -643,6 +643,36 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
+/* 移动端：光斑模糊与 backdrop-filter 在低端 GPU 上非常吃帧，这里直接降级 */
+@media (max-width: 768px) {
+  .login-blob {
+    display: none;
+  }
+
+  .login-box,
+  .login-theme-btn {
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+
+  .login-box {
+    padding: 26px 20px;
+    border-radius: 18px;
+    background: var(--bg-surface);
+    box-shadow: var(--shadow-md);
+  }
+
+  .login-box-enter {
+    animation-duration: 0.32s;
+  }
+
+  .login-theme-btn {
+    top: 14px;
+    right: 14px;
+    width: 34px;
+    height: 34px;
+  }
+}
 .login-container {
   display: flex;
   align-items: center;

@@ -303,13 +303,19 @@ const handleLogout = async () => {
       cancelButtonText: '取消',
       type: 'warning'
     })
-    await logout()
-    localStorage.removeItem('token')
-    localStorage.removeItem('loginUser')
-    router.push('/login')
   } catch {
-    // 用户取消
+    return // 用户取消
   }
+
+  try {
+    await logout()
+  } catch (e) {
+    console.warn('登出接口调用失败，继续本地登出', e)
+  }
+
+  localStorage.removeItem('token')
+  localStorage.removeItem('loginUser')
+  await router.replace('/login')
 }
 
 const status = ref('pending')
