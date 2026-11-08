@@ -693,11 +693,10 @@ onUnmounted(() => {
   overflow: hidden;
 }
 
-/* 背景渐变光斑 */
+/* 背景渐变光斑：用径向渐变本身做出柔和边缘，不再叠加 filter: blur() */
 .login-blob {
   position: absolute;
   border-radius: 50%;
-  filter: blur(90px);
   opacity: 0.55;
   pointer-events: none;
 }
@@ -745,14 +744,15 @@ onUnmounted(() => {
   width: 440px;
   max-width: 92vw;
   padding: 44px 40px;
-  background: var(--glass-bg);
-  backdrop-filter: var(--glass-blur);
-  -webkit-backdrop-filter: var(--glass-blur);
+  /* 不再用 backdrop-filter：面板背后有大面积模糊光斑，每次重绘都要重新采样，
+     低端机上是切页/切表单卡顿的主因。改成接近不透明的底色，视觉几乎无差异。 */
+  background: var(--glass-solid, var(--glass-bg));
   border: 1px solid var(--glass-border);
   border-radius: 24px;
   box-shadow: var(--shadow-lg);
   position: relative;
   z-index: 1;
+  contain: layout paint;
 }
 
 .login-box-enter {
@@ -942,9 +942,12 @@ onUnmounted(() => {
   font-weight: 500;
 }
 
-/* 步骤面板：1/3 用 v-show 常驻，切换不重建 DOM */
+/* 步骤面板：1/3 用 v-show 常驻，切换不重建 DOM；
+   min-height 固定住卡片高度，避免切换时整页（含光斑）重新布局 */
 .login-step-panels {
   position: relative;
+  min-height: 276px;
+  contain: layout;
 }
 
 /* 输入框样式跟随主题 */
