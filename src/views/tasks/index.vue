@@ -11,7 +11,7 @@
             <h2>任务闹钟</h2>
             <span class="tasks-count">{{ currentTasks.length }}</span>
           </div>
-          <p class="subtitle">到点自动执行：站内提醒，或回调一个 webhook 地址</p>
+          <p class="subtitle">到点自动执行：站内提醒、回调 webhook，或让 AI 去查一次数据</p>
         </div>
       </div>
       <el-button class="refresh-btn" :loading="loading" @click="loadTasks">
@@ -46,7 +46,10 @@
             </div>
             <div class="task-meta">
               <span class="task-time">{{ formatTime(task.dueAt) }}</span>
-              <span class="task-chip">{{ recurrenceLabel(task.recurrence) }}</span>
+              <span v-if="task.status === 'pending' && countdown(task.dueAt)" class="task-chip countdown">
+                {{ countdown(task.dueAt) }}
+              </span>
+              <span class="task-chip">{{ recurrenceLabel(task.recurrence, task.recurrenceRule) }}</span>
               <span class="task-chip action">{{ actionLabel(task) }}</span>
               <span v-if="task.overdue" class="task-chip danger">已到期</span>
               <span v-if="task.status !== 'pending'" class="task-chip muted">{{ statusLabel(task.status) }}</span>
@@ -84,7 +87,7 @@
             <li v-for="run in runs" :key="run.id" class="run-item">
               <span :class="['run-status', run.status]">{{ run.status === 'success' ? '成功' : '失败' }}</span>
               <span class="run-time">{{ formatTime(run.startedAt) }}</span>
-              <span class="run-action">{{ run.actionType }}</span>
+              <span class="run-action">{{ actionName(run.actionType) }}</span>
               <span class="run-detail">{{ run.detail }}</span>
             </li>
           </ul>
@@ -96,6 +99,27 @@
       <div class="edit-field">
         <label>任务名称</label>
         <el-input v-model="editForm.title" maxlength="128" show-word-limit />
+      </div>
+      <div class="edit-field">
+        <label>什么时候</label>
+        <el-input v-model="editForm.dueAt" type="datetime-local" />
+      </div>
+      <div class="edit-field">
+        <label>重复</label>
+        <el-select v-model="editForm.recurrence" style="width: 100%">
+          <el-option label="只一次" value="once" />
+          <el-option label="每天" value="daily" />
+          <el-option label="每周" value="weekly" />
+        </el-select>
+        <el-select
+          v-if="editForm.recurrence === 'weekly'"
+          v-model="editForm.weekday"
+          style="width: 100%; margin-top: 8px"
+          placeholder="选星期几"
+        >
+          <el-option v-for="day in weekdays" :key="day.value" :label="day.label" :value="day.value" />
+        </el-select>
+        <p class="field-hint">重复任务需要一个起始时间，到点后自动滚到下一次。</p>
       </div>
       <div class="edit-field">
         <label>到点做什么</label>
@@ -161,11 +185,41 @@ const editForm = ref({
   id: null,
   version: 0,
   title: '',
+  dueAt: '',
+  recurrence: 'once',
+  weekday: 'MO',
   actionType: 'notify',
   webhookUrl: '',
   mcpTool: '',
   mcpArg: ''
 })
+
+const weekdays = [
+  { value: 'MO', label: '周一' },
+  { value: 'TU', label: '周二' },
+  { value: 'WE', label: '周三' },
+  { value: 'TH', label: '周四' },
+  { value: 'FR', label: '周五' },
+  { value: 'SA', label: '周六' },
+  { value: 'SU', label: '周日' }
+]
+const WEEKDAY_LABELS = Object.fromEntries(weekdays.map((d) => [d.value, d.label]))
+
+// 只读展示用：动作类型的中文名
+const ACTION_NAMES = { notify: '站内提醒', webhook: 'Webhook', mcp: 'AI 查询' }
+const actionName = (value) => ACTION_NAMES[value] || value || '-'
+
+// 距到期还有多久：小于 1 天显示小时分钟，过期不显示（卡片已有“已到期”）
+const countdown = (value) => {
+  if (!value) return ''
+  const diff = new Date(value).getTime() - Date.now()
+  if (Number.isNaN(diff) || diff <= 0) return ''
+  const minutes = Math.round(diff / 60000)
+  if (minutes < 60) return `${minutes} 分钟后`
+  const hours = Math.floor(minutes / 60)
+  if (hours < 24) return `${hours} 小时后`
+  return `${Math.floor(hours / 24)} 天后`
+}
 
 // 只放行信息查询类工具；key 是后端返回的公共工具名
 const TOOL_LABELS = { weather: '天气', search: '搜索', now: '当前时间', fetch_url: '网页正文' }
@@ -198,9 +252,12 @@ const formatTime = (value) => {
   return sameDay ? `今天 ${hm}` : `${d.getMonth() + 1}月${d.getDate()}日 ${hm}`
 }
 
-const recurrenceLabel = (recurrence) => {
+const recurrenceLabel = (recurrence, rule) => {
   if (recurrence === 'daily') return '每天'
-  if (recurrence === 'weekly') return '每周'
+  if (recurrence === 'weekly') {
+    const day = /BYDAY=([A-Z]{2})/.exec(rule || '')
+    return day ? `每${WEEKDAY_LABELS[day[1]] || '周'}` : '每周'
+  }
   return '一次'
 }
 
@@ -328,6 +385,9 @@ const openEdit = (task) => {
     id: task.id,
     version: task.version,
     title: task.title,
+    dueAt: task.dueAt || '',
+    recurrence: task.recurrence || 'once',
+    weekday: (/BYDAY=([A-Z]{2})/.exec(task.recurrenceRule || '') || [])[1] || 'MO',
     actionType: ['webhook', 'mcp'].includes(task.actionType) ? task.actionType : 'notify',
     webhookUrl: match ? match[1] : '',
     ...readActionConfig(task)
@@ -339,6 +399,14 @@ const handleSave = async () => {
   const form = editForm.value
   if (form.actionType === 'webhook' && !/^https?:\/\//.test(form.webhookUrl)) {
     ElMessage.warning('Webhook 地址要以 http:// 或 https:// 开头')
+    return
+  }
+  if (!form.dueAt && form.recurrence !== 'once') {
+    ElMessage.warning('重复任务需要一个起始时间')
+    return
+  }
+  if (form.recurrence === 'weekly' && !form.weekday) {
+    ElMessage.warning('选一个每周的哪一天')
     return
   }
   if (form.actionType === 'mcp') {
@@ -357,6 +425,9 @@ const handleSave = async () => {
     await updateTask(form.id, {
       version: form.version,
       title: form.title,
+      dueAt: form.dueAt || null,
+      recurrence: form.recurrence,
+      recurrenceRule: form.recurrence === 'weekly' ? `BYDAY=${form.weekday}` : null,
       actionType: form.actionType,
       actionConfig: buildActionConfig(form)
     })
