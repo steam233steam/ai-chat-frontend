@@ -10,33 +10,7 @@
         新对话
       </el-button>
 
-      <div class="sidebar-tabs" role="tablist" aria-label="侧边栏视图">
-        <button
-          :class="['sidebar-tab', { active: activeTab === 'sessions' }]"
-          type="button"
-          role="tab"
-          :aria-selected="activeTab === 'sessions'"
-          @click="switchTab('sessions')"
-        >
-          <el-icon><ChatDotRound /></el-icon>
-          <span>会话</span>
-          <span v-if="sessions.length" class="tab-count">{{ sessions.length }}</span>
-        </button>
-        <button
-          :class="['sidebar-tab', { active: activeTab === 'tasks' }]"
-          type="button"
-          role="tab"
-          :aria-selected="activeTab === 'tasks'"
-          @click="switchTab('tasks')"
-        >
-          <el-icon><Calendar /></el-icon>
-          <span>任务</span>
-          <span v-if="taskCounts.pending" class="tab-count">{{ taskCounts.pending }}</span>
-        </button>
-      </div>
-
       <el-input
-        v-if="activeTab === 'sessions'"
         v-model="sessionQuery"
         placeholder="搜索对话..."
         :prefix-icon="Search"
@@ -45,7 +19,7 @@
       />
     </div>
 
-    <template v-if="activeTab === 'sessions'">
+    <template>
       <div class="sidebar-section-title">
         <span>最近对话</span>
         <span class="session-count">{{ filteredSessions.length }}</span>
@@ -114,21 +88,11 @@
       </div>
     </template>
 
-    <SidebarTasks
-      v-else
-      v-model:status="taskFilter"
-      :tasks="taskList"
-      :counts="taskCounts"
-      :loading="tasksLoading"
-      :acting-task-id="actingTaskId"
-      :sessions="sessions"
-      @refresh="emit('refresh-tasks')"
-      @complete="forwardCompleteTask"
-      @delete="forwardDeleteTask"
-      @open-session="forwardOpenSession"
-    />
-
     <div class="sidebar-footer">
+      <button class="tasks-entry" type="button" @click="emit('open-tasks')">
+        <el-icon><Calendar /></el-icon>
+        <span>任务闹钟</span>
+      </button>
       <div class="sidebar-user-card">
         <el-avatar :size="34" class="sidebar-avatar">{{ userName?.charAt(0) || 'U' }}</el-avatar>
         <div class="sidebar-user-meta">
@@ -166,19 +130,12 @@ import {
   SwitchButton
 } from '@element-plus/icons-vue'
 import { updateTitle } from '@/api/chat'
-import SidebarTasks from '@/components/SidebarTasks.vue'
 
 const props = defineProps({
   sessions: { type: Array, default: () => [] },
   currentChatId: { type: String, default: null },
   userName: { type: String, default: '' },
   visible: { type: Boolean, default: false },
-  tasksByStatus: {
-    type: Object,
-    default: () => ({ pending: [], done: [], cancelled: [] })
-  },
-  tasksLoading: { type: Boolean, default: false },
-  actingTaskId: { type: [Number, String], default: null }
 })
 
 const emit = defineEmits([
@@ -188,17 +145,13 @@ const emit = defineEmits([
   'delete',
   'settings',
   'logout',
-  'refresh-tasks',
-  'complete-task',
-  'delete-task'
+  'open-tasks'
 ])
 
 const sessionQuery = ref('')
 const editingId = ref(null)
 const editingTitle = ref('')
 const menuId = ref(null)
-const activeTab = ref('sessions')
-const taskFilter = ref('pending')
 
 const filteredSessions = computed(() => {
   const keyword = sessionQuery.value.trim().toLowerCase()
@@ -208,19 +161,11 @@ const filteredSessions = computed(() => {
   )
 })
 
-const taskCounts = computed(() => ({
-  pending: props.tasksByStatus?.pending?.length || 0,
-  done: props.tasksByStatus?.done?.length || 0,
-  cancelled: props.tasksByStatus?.cancelled?.length || 0
-}))
-const taskList = computed(() => props.tasksByStatus?.[taskFilter.value] || [])
-
 const hideMenu = () => {
   menuId.value = null
 }
 
 const handleNewChat = () => {
-  activeTab.value = 'sessions'
   sessionQuery.value = ''
   hideMenu()
   emit('new-chat')
@@ -230,33 +175,6 @@ const selectSession = (sessionId) => {
   hideMenu()
   emit('select', sessionId)
 }
-
-const switchTab = (tab) => {
-  if (activeTab.value === tab) return
-  cancelEditing()
-  activeTab.value = tab
-  hideMenu()
-  if (tab === 'tasks') emit('refresh-tasks')
-}
-
-const forwardCompleteTask = (task) => emit('complete-task', task)
-const forwardDeleteTask = (task) => emit('delete-task', task)
-const forwardOpenSession = (sessionId) => {
-  if (!sessionId) return
-  cancelEditing()
-  activeTab.value = 'sessions'
-  emit('select', sessionId)
-}
-
-/** 到期提醒点击后直接切到任务 tab；移动端由父组件负责打开抽屉。 */
-const openTasks = () => {
-  cancelEditing()
-  activeTab.value = 'tasks'
-  hideMenu()
-  emit('refresh-tasks')
-}
-
-defineExpose({ openTasks })
 
 const showMenu = (session) => {
   menuId.value = session.sessionId
@@ -977,5 +895,26 @@ onUnmounted(() => document.removeEventListener('click', hideMenu))
   .session-memory-panel {
     margin-left: 30px;
   }
+}
+
+.tasks-entry {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  margin-bottom: 10px;
+  padding: 9px 12px;
+  border: 1px solid var(--border-soft, #e5e7eb);
+  border-radius: 10px;
+  background: transparent;
+  color: var(--text-primary, #1f2937);
+  font-size: 13px;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.tasks-entry:hover {
+  background: var(--bg-hover, #f3f4f6);
+  border-color: var(--border-strong, #d1d5db);
 }
 </style>

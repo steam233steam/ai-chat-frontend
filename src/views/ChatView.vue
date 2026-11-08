@@ -11,16 +11,11 @@
       :current-chat-id="currentChatId"
       :user-name="userInfo?.name || ''"
       :visible="sidebarVisible"
-      :tasks-by-status="tasksByStatus"
-      :tasks-loading="tasksLoading"
-      :acting-task-id="actingTaskId"
       @new-chat="newChat"
       @select="selectChat"
       @rename="handleRename"
       @delete="deleteChat"
-      @refresh-tasks="loadTasks"
-      @complete-task="handleCompleteTask"
-      @delete-task="handleDeleteTask"
+      @open-tasks="router.push('/tasks')"
       @settings="router.push('/settings')"
       @logout="handleLogout"
     />
@@ -184,10 +179,6 @@ import {
   logout,
   getCurrentPendingAction,
   getPendingAction,
-  getTasks,
-  getTask,
-  completeTask,
-  deleteTask,
   getDueTasks
 } from '@/api/user'
 import { enhanceCodeBlocks, exportChatAsJSON, exportChatAsText, copyText } from '@/utils/markdown'
@@ -239,19 +230,6 @@ const DUE_NOTIFIED_STORAGE_KEY = 'mb:notifiedDueTasks:v1'
 const dueNotified = ref({})
 let dueTimer = null
 let duePolling = false
-
-// ==================== 侧边栏任务 / 记忆 ====================
-const TASK_STATUSES = ['pending', 'done', 'cancelled']
-const TASKS_PAGE_SIZE = 100
-
-const tasksByStatus = reactive({
-  pending: [],
-  done: [],
-  cancelled: []
-})
-const tasksLoading = ref(false)
-const actingTaskId = ref(null)
-let tasksFetchToken = 0
 
 // ==================== MindButler 待确认弹窗 ====================
 const pendingDialog = reactive({
@@ -339,7 +317,6 @@ onMounted(async () => {
   await loadChatId()
   await loadSessions()
   await loadMessages()
-  loadTasks()
   startDueReminder()
 
   window.addEventListener('resize', onResize)
@@ -436,31 +413,6 @@ const loadSessions = async () => {
  * 侧边栏任务：一次拉齐三种状态，侧栏内切换筛选不再发请求。
  * 用 allSettled，单个状态失败不影响其他列表；token 防止并发刷新时旧响应覆盖新数据。
  */
-const loadTasks = async () => {
-  const token = ++tasksFetchToken
-  tasksLoading.value = true
-  try {
-    const results = await Promise.allSettled(
-      TASK_STATUSES.map((status) => getTasks(status, undefined, TASKS_PAGE_SIZE))
-    )
-    if (token !== tasksFetchToken) return
-
-    results.forEach((result, index) => {
-      const status = TASK_STATUSES[index]
-      if (result.status !== 'fulfilled') {
-        console.warn(`加载 ${status} 任务失败`, result.reason)
-        return
-      }
-      const res = result.value
-      tasksByStatus[status] = res?.code === 200 ? (res.data || []) : []
-    })
-  } catch (e) {
-    if (token === tasksFetchToken) console.error('加载任务失败', e)
-  } finally {
-    if (token === tasksFetchToken) tasksLoading.value = false
-  }
-}
-
 const loadDueNotified = () => {
   try {
     const raw = JSON.parse(localStorage.getItem(DUE_NOTIFIED_STORAGE_KEY) || '{}')
@@ -478,11 +430,6 @@ const saveDueNotified = () => {
   }
 }
 
-const openTasksPanel = () => {
-  if (isMobile.value) sidebarVisible.value = true
-  chatSidebarRef.value?.openTasks?.()
-}
-
 const showDueNotification = (task) => {
   const due = task?.dueAt ? formatDueAt(task.dueAt, { compact: true }) : ''
   ElNotification({
@@ -492,7 +439,7 @@ const showDueNotification = (task) => {
     duration: 10_000,
     position: 'bottom-right',
     customClass: 'mb-due-notification',
-    onClick: openTasksPanel
+    onClick: () => router.push('/tasks')
   })
 }
 
@@ -545,63 +492,6 @@ const stopDueReminder = () => {
     dueTimer = null
   }
   document.removeEventListener('visibilitychange', onVisibilityChange)
-}
-
-const handleCompleteTask = async (task) => {
-  if (!task?.id || task.status !== 'pending' || actingTaskId.value != null) return
-  actingTaskId.value = task.id
-  try {
-    let version = task.version
-    if (version == null) {
-      const detail = await getTask(task.id)
-      version = detail?.code === 200 ? detail.data?.version : null
-    }
-    const res = await completeTask(task.id, version)
-    if (res?.code === 200) {
-      ElMessage.success(task.recurrence === 'once' ? '任务已完成' : '已滚动到下一次')
-      await loadTasks()
-    } else {
-      ElMessage.warning(res?.message || '操作失败')
-    }
-  } catch (e) {
-    if (e?.code === 409 || e?.code === 404) {
-      ElMessage.warning(e?.code === 409 ? '任务状态已变化，已刷新' : '任务已不存在，已刷新')
-      await loadTasks()
-    } else {
-      ElMessage.error(e?.message || '操作失败')
-    }
-  } finally {
-    actingTaskId.value = null
-  }
-}
-
-const handleDeleteTask = async (task) => {
-  if (!task?.id || actingTaskId.value != null) return
-  try {
-    await ElMessageBox.confirm(`确定删除任务「${task.title || '未命名任务'}」吗？`, '删除任务', {
-      confirmButtonText: '删除',
-      cancelButtonText: '取消',
-      type: 'warning'
-    })
-  } catch {
-    return
-  }
-
-  actingTaskId.value = task.id
-  try {
-    await deleteTask(task.id)
-    ElMessage.success('任务已删除')
-    await loadTasks()
-  } catch (e) {
-    if (e?.code === 404) {
-      ElMessage.warning('任务已不存在，已刷新')
-      await loadTasks()
-    } else {
-      ElMessage.error(e?.message || '删除失败')
-    }
-  } finally {
-    actingTaskId.value = null
-  }
 }
 
 // 把一条历史接口返回项归一化成消息对象（兼容字符串数组与 v5/v6 对象结构）
@@ -871,10 +761,7 @@ const onPendingResolved = (payload) => {
     // 侧栏刷新推迟到弹窗关闭动画之后，避免确认瞬间同时触发 4 个请求 + 大列表重渲染。
     const receipt = payload?.result?.receipt
     if (receipt) appendReceiptMessage(receipt)
-    scheduleIdle(() => {
-      loadSessions()
-      loadTasks()
-    })
+    scheduleIdle(loadSessions)
   } else if (action === 'rejected') {
     // 弹窗自身展示取消状态。拒绝是幂等静默成功，不落库新消息，只刷新会话列表
     scheduleIdle(loadSessions)
@@ -1127,7 +1014,6 @@ const deleteChat = async (sessionId) => {
   chatSessions.value = chatSessions.value.filter(s => s.sessionId !== sessionId)
 
   // 后端删除会话会级联清理该会话的记忆与 pending，侧栏数据同步刷新，避免残留
-  loadTasks()
 
   if (currentChatId.value === sessionId) {
     if (chatSessions.value.length > 0) {
