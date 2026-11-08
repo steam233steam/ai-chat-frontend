@@ -535,3 +535,15 @@ html[data-theme='dark'] .el-select-dropdown__item.is-hovering {
 .mb-due-notification .el-notification__icon {
   color: var(--color-warning);
 }
+
+/* 移动端关闭玻璃模糊：backdrop-filter 在滚动/切页时每帧重算背景，低端机直接掉帧 */
+@media (max-width: 768px) {
+  .chat-header,
+  .sidebar,
+  .login-theme-btn,
+  .glass,
+  [class*='glass'] {
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+  }
+}

@@ -86,4 +86,26 @@ router.beforeEach((to, from, next) => {
   }
 })
 
+// 首屏渲染完成后，空闲时把其余路由的 chunk 预取下来，
+// 切页时不再触发网络请求（移动端弱网下切换卡顿主要是这个）。
+export const prefetchRoutes = () => {
+  const run = () => {
+    const walk = (list) => {
+      list.forEach((route) => {
+        if (typeof route.component === 'function') {
+          route.component().catch(() => {})
+        }
+        if (route.children) walk(route.children)
+      })
+    }
+    walk(routes)
+  }
+
+  if (typeof requestIdleCallback === 'function') {
+    requestIdleCallback(run, { timeout: 4000 })
+  } else {
+    setTimeout(run, 2000)
+  }
+}
+
 export default router
