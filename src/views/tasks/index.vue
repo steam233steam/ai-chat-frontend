@@ -181,9 +181,31 @@
         <label>到点做什么</label>
         <el-select v-model="editForm.actionType" style="width: 100%">
           <el-option label="站内提醒（默认）" value="notify" />
+          <el-option label="推到手机（横幅通知）" value="push" />
           <el-option label="调用 Webhook" value="webhook" />
           <el-option label="让 AI 查点东西（MCP 工具）" value="mcp" />
         </el-select>
+      </div>
+      <div v-if="editForm.actionType === 'push'" class="edit-field">
+        <label>推送到哪</label>
+        <el-select v-model="editForm.pushChannel" style="width: 100%">
+          <el-option label="ntfy（安卓，推荐）" value="ntfy" />
+          <el-option label="Bark（iOS）" value="bark" />
+          <el-option label="企业微信群机器人" value="wecom" />
+        </el-select>
+        <el-input
+          v-if="editForm.pushChannel === 'ntfy'"
+          v-model="editForm.pushTopic"
+          style="margin-top: 8px"
+          placeholder="主题，例如 mindbutler-233"
+        />
+        <el-input
+          v-else
+          v-model="editForm.pushTarget"
+          style="margin-top: 8px"
+          :placeholder="editForm.pushChannel === 'bark' ? 'https://api.day.app/你的KEY' : '群机器人 webhook 地址'"
+        />
+        <p class="field-hint">{{ pushHint }}</p>
       </div>
       <div v-if="editForm.actionType === 'webhook'" class="edit-field">
         <label>Webhook 地址</label>
@@ -338,7 +360,10 @@ const editForm = ref({
   actionType: 'notify',
   webhookUrl: '',
   mcpTool: '',
-  mcpArg: ''
+  mcpArg: '',
+  pushChannel: 'ntfy',
+  pushTopic: '',
+  pushTarget: ''
 })
 
 const weekdays = [
@@ -353,8 +378,15 @@ const weekdays = [
 const WEEKDAY_LABELS = Object.fromEntries(weekdays.map((d) => [d.value, d.label]))
 
 // 只读展示用：动作类型的中文名
-const ACTION_NAMES = { notify: '站内提醒', webhook: 'Webhook', mcp: 'AI 查询' }
+const ACTION_NAMES = { notify: '站内提醒', webhook: 'Webhook', mcp: 'AI 查询', push: '手机推送' }
 const actionName = (value) => ACTION_NAMES[value] || value || '-'
+
+const PUSH_CHANNEL_NAMES = { ntfy: 'ntfy', bark: 'Bark', wecom: '企业微信' }
+const pushHint = computed(() => {
+  if (editForm.value.pushChannel === 'bark') return 'iOS 装 Bark，把 App 里给你的地址粘到这里。'
+  if (editForm.value.pushChannel === 'wecom') return '企业微信群里加「群机器人」，把它的 webhook 地址粘到这里。'
+  return '安卓装 ntfy App，订阅同一个主题名；到点会以横幅通知弹出。'
+})
 
 // 距到期还有多久：小于 1 天显示小时分钟，过期不显示（卡片已有“已到期”）
 const countdown = (value) => {
@@ -496,6 +528,14 @@ const recurrenceLabel = (recurrence, rule) => {
 const statusLabel = (value) => (value === 'done' ? '已完成' : value === 'cancelled' ? '已取消' : value)
 
 const actionLabel = (task) => {
+  if (task.actionType === 'push') {
+    try {
+      const cfg = JSON.parse(task.actionConfig || '{}')
+      return `推送 · ${PUSH_CHANNEL_NAMES[cfg.channel] || cfg.channel || 'ntfy'}`
+    } catch (e) {
+      return '推送'
+    }
+  }
   if (task.actionType === 'mcp') {
     const match = /"tool"\s*:\s*"([^"]+)"/.exec(task.actionConfig || '')
     if (!match) return 'MCP'
@@ -638,6 +678,12 @@ const buildActionConfig = (form) => {
   if (form.actionType === 'webhook') {
     return JSON.stringify({ url: form.webhookUrl })
   }
+  if (form.actionType === 'push') {
+    if (form.pushChannel === 'ntfy') {
+      return JSON.stringify({ channel: 'ntfy', server: 'https://ntfy.sh', topic: form.pushTopic.trim() })
+    }
+    return JSON.stringify({ channel: form.pushChannel, target: form.pushTarget.trim() })
+  }
   if (form.actionType === 'mcp') {
     const tool = mcpTools.value.find((t) => t.name === form.mcpTool)
     const key = tool ? TOOL_ARG_KEYS[tool.tool] : ''
@@ -657,6 +703,18 @@ const loadMcpTools = async () => {
 }
 
 const readActionConfig = (task) => {
+  if (task.actionType === 'push') {
+    try {
+      const cfg = JSON.parse(task.actionConfig || '{}')
+      return {
+        pushChannel: cfg.channel || 'ntfy',
+        pushTopic: cfg.topic || '',
+        pushTarget: cfg.target || ''
+      }
+    } catch (e) {
+      return { pushChannel: 'ntfy', pushTopic: '', pushTarget: '' }
+    }
+  }
   if (task.actionType !== 'mcp') return { mcpTool: '', mcpArg: '' }
   try {
     const cfg = JSON.parse(task.actionConfig || '{}')
@@ -677,7 +735,7 @@ const openEdit = (task) => {
     dueAt: task.dueAt || '',
     recurrence: task.recurrence || 'once',
     weekday: (/BYDAY=([A-Z]{2})/.exec(task.recurrenceRule || '') || [])[1] || 'MO',
-    actionType: ['webhook', 'mcp'].includes(task.actionType) ? task.actionType : 'notify',
+    actionType: ['webhook', 'mcp', 'push'].includes(task.actionType) ? task.actionType : 'notify',
     webhookUrl: match ? match[1] : '',
     ...readActionConfig(task)
   }
@@ -697,6 +755,17 @@ const handleSave = async () => {
   if (form.recurrence === 'weekly' && !form.weekday) {
     ElMessage.warning('选一个每周的哪一天')
     return
+  }
+  if (form.actionType === 'push') {
+    if (form.pushChannel === 'ntfy') {
+      if (!/^[A-Za-z0-9_-]{1,64}$/.test((form.pushTopic || '').trim())) {
+        ElMessage.warning('主题只能用字母、数字、下划线或短横线，例如 mindbutler-233')
+        return
+      }
+    } else if (!/^https?:\/\//.test(form.pushTarget || '')) {
+      ElMessage.warning('推送地址要以 http:// 或 https:// 开头')
+      return
+    }
   }
   if (form.actionType === 'mcp') {
     if (!form.mcpTool) {
