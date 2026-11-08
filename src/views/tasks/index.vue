@@ -1,10 +1,24 @@
 <template>
-  <div class="tasks-container">
+  <div class="tasks-shell">
+    <div v-if="isMobile && sidebarVisible" class="sidebar-mask" @click="sidebarVisible = false"></div>
+    <ChatSidebar
+      :sessions="sessions"
+      :current-chat-id="null"
+      :user-name="userName"
+      :visible="sidebarVisible"
+      @new-chat="goNewChat"
+      @select="goSession"
+      @rename="handleRename"
+      @delete="handleDeleteSession"
+      @open-tasks="sidebarVisible = false"
+      @settings="router.push('/settings')"
+      @logout="handleLogout"
+    />
+    <div class="tasks-container">
     <div class="tasks-header">
       <div class="tasks-heading">
-        <el-button class="back-btn" @click="router.push('/chat')">
-          <el-icon><ArrowLeft /></el-icon>
-          返回对话
+        <el-button v-if="isMobile" class="back-btn menu-btn" aria-label="打开会话列表" @click="sidebarVisible = true">
+          <el-icon><Menu /></el-icon>
         </el-button>
         <div class="title-block">
           <div class="title-row">
@@ -202,14 +216,18 @@
       @resolved="handlePendingResolved"
       @dismiss="pendingDialog.visible = false"
     />
+    </div>
   </div>
 </template>
 
 <script setup>
-import { computed, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { ArrowLeft, Loading, Plus, Refresh } from '@element-plus/icons-vue'
+import { Loading, Menu, Plus, Refresh } from '@element-plus/icons-vue'
+import ChatSidebar from '@/components/ChatSidebar.vue'
+import { getSessions, clearSession, updateTitle } from '@/api/chat'
+import { getUserInfo, logout } from '@/api/user'
 import { listTasks, listTaskRuns, updateTask, completeTask, deleteTask } from '@/api/task'
 import { listMcpTools } from '@/api/mcp'
 import { sendMessageStream } from '@/api/chat'
@@ -224,6 +242,75 @@ const tabs = [
   { label: '已完成', value: 'done' },
   { label: '已取消', value: 'cancelled' }
 ]
+
+const isMobile = ref(false)
+const sidebarVisible = ref(false)
+const sessions = ref([])
+const userName = ref('')
+
+const updateIsMobile = () => {
+  isMobile.value = window.innerWidth <= 768
+  if (!isMobile.value) sidebarVisible.value = false
+}
+
+const loadSessions = async () => {
+  try {
+    const res = await getSessions()
+    if (res.code === 200) sessions.value = res.data || []
+  } catch (e) {
+    console.error('加载会话列表失败', e)
+  }
+}
+
+const goNewChat = () => {
+  sidebarVisible.value = false
+  router.push('/chat')
+}
+
+const goSession = (sessionId) => {
+  sidebarVisible.value = false
+  if (sessionId) router.push(`/chat/${sessionId}`)
+}
+
+const handleRename = ({ sessionId, title }) => {
+  const session = sessions.value.find((s) => s.sessionId === sessionId)
+  if (session) session.title = title
+}
+
+const handleDeleteSession = async (sessionId) => {
+  try {
+    await ElMessageBox.confirm('删除后该对话、消息和本会话记忆不可恢复，确定继续吗？', '提示', {
+      confirmButtonText: '确定',
+      cancelButtonText: '取消',
+      type: 'warning'
+    })
+  } catch {
+    return
+  }
+  try {
+    await clearSession(sessionId)
+    sessions.value = sessions.value.filter((s) => s.sessionId !== sessionId)
+    ElMessage.success('对话已删除')
+  } catch (e) {
+    ElMessage.error(e?.message || '删除会话失败')
+  }
+}
+
+const handleLogout = async () => {
+  try {
+    await ElMessageBox.confirm('确定要退出登录吗？', '提示', {
+      confirmButtonText: '确定',
+      cancelButtonText: '取消',
+      type: 'warning'
+    })
+    await logout()
+    localStorage.removeItem('token')
+    localStorage.removeItem('loginUser')
+    router.push('/login')
+  } catch {
+    // 用户取消
+  }
+}
 
 const status = ref('pending')
 const tasks = ref([])
@@ -637,9 +724,22 @@ const handleSave = async () => {
   }
 }
 
-onMounted(() => {
+onMounted(async () => {
+  updateIsMobile()
+  window.addEventListener('resize', updateIsMobile)
   loadTasks()
   loadMcpTools()
+  loadSessions()
+  try {
+    const res = await getUserInfo()
+    if (res?.code === 200) userName.value = res.data?.name || res.data?.phone || ''
+  } catch {
+    // 用户名拿不到不影响页面
+  }
+})
+
+onBeforeUnmount(() => {
+  window.removeEventListener('resize', updateIsMobile)
 })
 </script>
 
@@ -1016,6 +1116,49 @@ onMounted(() => {
 @media (max-width: 640px) {
   .stats-row {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.tasks-shell {
+  display: flex;
+  height: 100vh;
+  width: 100%;
+  overflow: hidden;
+  background: var(--bg-base);
+}
+
+.tasks-shell .tasks-container {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+}
+
+.sidebar-mask {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.4);
+  z-index: 99;
+}
+
+.menu-btn {
+  flex-shrink: 0;
+}
+
+@media (max-width: 768px) {
+  .tasks-shell .tasks-container {
+    padding: 16px 14px 40px;
+  }
+
+  .tasks-heading {
+    gap: 10px;
+  }
+
+  .title-row h2 {
+    font-size: 19px;
+  }
+
+  .subtitle {
+    font-size: 12px;
   }
 }
 </style>
