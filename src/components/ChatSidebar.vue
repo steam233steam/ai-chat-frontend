@@ -51,33 +51,6 @@
         <span class="session-count">{{ filteredSessions.length }}</span>
       </div>
       <div class="chat-list">
-        <div v-if="memoriesLoading && memories.length === 0" class="sidebar-sync-hint">
-          正在同步记忆…
-        </div>
-
-        <!-- 全局记忆：跨会话生效，固定放在会话列表上方 -->
-        <div v-if="globalMemories.length" class="memory-group global-memory-group">
-          <button
-            class="memory-group-head"
-            type="button"
-            :aria-expanded="globalMemoryOpen"
-            @click="toggleGlobalMemories"
-          >
-            <span class="memory-group-title">
-              <el-icon><Collection /></el-icon>
-              全局记忆
-              <span class="memory-count">{{ globalMemories.length }}</span>
-            </span>
-            <el-icon class="memory-caret" :class="{ expanded: globalMemoryOpen }"><ArrowRight /></el-icon>
-          </button>
-          <MemoryList
-            v-if="globalMemoryOpen"
-            :memories="globalMemories"
-            :acting-id="actingMemoryId"
-            @delete="forwardDeleteMemory"
-          />
-        </div>
-
         <div
           v-if="filteredSessions.length === 0"
           class="empty-sessions"
@@ -101,16 +74,6 @@
             <div class="chat-title-wrap">
               <div class="chat-title-row">
                 <span class="chat-title" v-if="editingId !== session.sessionId">{{ session.title }}</span>
-                <button
-                  v-if="memoryCountFor(session.sessionId)"
-                  :class="['session-memory-btn', { active: isMemoryExpanded(session) }]"
-                  type="button"
-                  :title="`本会话记忆 ${memoryCountFor(session.sessionId)} 条`"
-                  @click.stop="toggleSessionMemory(session)"
-                >
-                  <el-icon><Collection /></el-icon>
-                  <span>{{ memoryCountFor(session.sessionId) }}</span>
-                </button>
               </div>
               <span v-if="session.model" class="session-model-tag" :title="'锁定模型：' + session.model">{{ session.model }}</span>
             </div>
@@ -146,20 +109,6 @@
                 <span>删除</span>
               </div>
             </div>
-          </div>
-
-          <!-- 会话级记忆跟随当前会话展开，避免记忆和会话各自孤立管理 -->
-          <div v-if="isMemoryExpanded(session)" class="session-memory-panel" @click.stop>
-            <div class="session-memory-head">
-              <span>本节记忆</span>
-              <span class="memory-count">{{ memoryCountFor(session.sessionId) }}</span>
-              <button type="button" class="memory-collapse" @click="collapseSessionMemory">收起</button>
-            </div>
-            <MemoryList
-              :memories="memoriesForSession(session.sessionId)"
-              :acting-id="actingMemoryId"
-              @delete="forwardDeleteMemory"
-            />
           </div>
         </div>
       </div>
@@ -217,9 +166,7 @@ import {
   SwitchButton
 } from '@element-plus/icons-vue'
 import { updateTitle } from '@/api/chat'
-import MemoryList from '@/components/MemoryList.vue'
 import SidebarTasks from '@/components/SidebarTasks.vue'
-import { sessionMemoryCounts as buildSessionMemoryCounts, splitMemories } from '@/utils/sidebar'
 
 const props = defineProps({
   sessions: { type: Array, default: () => [] },
@@ -231,10 +178,7 @@ const props = defineProps({
     default: () => ({ pending: [], done: [], cancelled: [] })
   },
   tasksLoading: { type: Boolean, default: false },
-  actingTaskId: { type: [Number, String], default: null },
-  memories: { type: Array, default: () => [] },
-  memoriesLoading: { type: Boolean, default: false },
-  actingMemoryId: { type: [Number, String], default: null }
+  actingTaskId: { type: [Number, String], default: null }
 })
 
 const emit = defineEmits([
@@ -246,9 +190,7 @@ const emit = defineEmits([
   'logout',
   'refresh-tasks',
   'complete-task',
-  'delete-task',
-  'refresh-memories',
-  'delete-memory'
+  'delete-task'
 ])
 
 const sessionQuery = ref('')
@@ -257,8 +199,6 @@ const editingTitle = ref('')
 const menuId = ref(null)
 const activeTab = ref('sessions')
 const taskFilter = ref('pending')
-const expandedMemorySessionId = ref(null)
-const globalMemoryOpen = ref(false)
 
 const filteredSessions = computed(() => {
   const keyword = sessionQuery.value.trim().toLowerCase()
@@ -267,10 +207,6 @@ const filteredSessions = computed(() => {
     (session.title || '').toLowerCase().includes(keyword)
   )
 })
-
-const memoryGroups = computed(() => splitMemories(props.memories))
-const globalMemories = computed(() => memoryGroups.value.global)
-const sessionMemoryCounts = computed(() => buildSessionMemoryCounts(props.memories))
 
 const taskCounts = computed(() => ({
   pending: props.tasksByStatus?.pending?.length || 0,
@@ -286,13 +222,11 @@ const hideMenu = () => {
 const handleNewChat = () => {
   activeTab.value = 'sessions'
   sessionQuery.value = ''
-  expandedMemorySessionId.value = null
   hideMenu()
   emit('new-chat')
 }
 
 const selectSession = (sessionId) => {
-  expandedMemorySessionId.value = null
   hideMenu()
   emit('select', sessionId)
 }
@@ -305,39 +239,12 @@ const switchTab = (tab) => {
   if (tab === 'tasks') emit('refresh-tasks')
 }
 
-const memoryCountFor = (sessionId) => sessionMemoryCounts.value[sessionId] || 0
-
-const memoriesForSession = (sessionId) => memoryGroups.value.bySession[sessionId] || []
-
-const isMemoryExpanded = (session) =>
-  props.currentChatId === session.sessionId &&
-  expandedMemorySessionId.value === session.sessionId &&
-  memoryCountFor(session.sessionId) > 0
-
-const toggleSessionMemory = (session) => {
-  const isOpen = expandedMemorySessionId.value === session.sessionId
-  if (props.currentChatId !== session.sessionId) emit('select', session.sessionId)
-  expandedMemorySessionId.value = isOpen ? null : session.sessionId
-  if (!isOpen) emit('refresh-memories')
-}
-
-const collapseSessionMemory = () => {
-  expandedMemorySessionId.value = null
-}
-
-const toggleGlobalMemories = () => {
-  globalMemoryOpen.value = !globalMemoryOpen.value
-  if (globalMemoryOpen.value) emit('refresh-memories')
-}
-
 const forwardCompleteTask = (task) => emit('complete-task', task)
 const forwardDeleteTask = (task) => emit('delete-task', task)
-const forwardDeleteMemory = (memory) => emit('delete-memory', memory)
 const forwardOpenSession = (sessionId) => {
   if (!sessionId) return
   cancelEditing()
   activeTab.value = 'sessions'
-  expandedMemorySessionId.value = null
   emit('select', sessionId)
 }
 

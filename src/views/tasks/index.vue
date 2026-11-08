@@ -102,12 +102,26 @@
         <el-select v-model="editForm.actionType" style="width: 100%">
           <el-option label="站内提醒（默认）" value="notify" />
           <el-option label="调用 Webhook" value="webhook" />
+          <el-option label="让 AI 查点东西（MCP 工具）" value="mcp" />
         </el-select>
       </div>
       <div v-if="editForm.actionType === 'webhook'" class="edit-field">
         <label>Webhook 地址</label>
         <el-input v-model="editForm.webhookUrl" placeholder="https://example.com/hook" />
         <p class="field-hint">到点会 POST 一条 JSON 到这个地址，5 秒超时，2xx 算成功。</p>
+      </div>
+      <div v-if="editForm.actionType === 'mcp'" class="edit-field">
+        <label>查什么</label>
+        <el-select v-model="editForm.mcpTool" style="width: 100%" placeholder="选一个工具">
+          <el-option v-for="tool in mcpTools" :key="tool.name" :label="tool.label" :value="tool.name" />
+        </el-select>
+        <el-input
+          v-if="editForm.mcpTool"
+          v-model="editForm.mcpArg"
+          style="margin-top: 8px"
+          :placeholder="mcpArgPlaceholder"
+        />
+        <p class="field-hint">到点会调用这个工具，把结果写进执行记录并提醒你。</p>
       </div>
       <template #footer>
         <el-button @click="editVisible = false">取消</el-button>
@@ -123,6 +137,7 @@ import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { ArrowLeft, Loading, Refresh } from '@element-plus/icons-vue'
 import { listTasks, listTaskRuns, updateTask, completeTask, deleteTask } from '@/api/task'
+import { listMcpTools } from '@/api/mcp'
 
 const router = useRouter()
 
@@ -142,7 +157,28 @@ const runsLoading = ref(false)
 
 const editVisible = ref(false)
 const saving = ref(false)
-const editForm = ref({ id: null, version: 0, title: '', actionType: 'notify', webhookUrl: '' })
+const editForm = ref({
+  id: null,
+  version: 0,
+  title: '',
+  actionType: 'notify',
+  webhookUrl: '',
+  mcpTool: '',
+  mcpArg: ''
+})
+
+// 只放行信息查询类工具；key 是后端返回的公共工具名
+const TOOL_LABELS = { weather: '天气', search: '搜索', now: '当前时间', fetch_url: '网页正文' }
+const TOOL_ARG_KEYS = { weather: 'city', search: 'q', fetch_url: 'url', now: '' }
+const TOOL_ARG_HINTS = { weather: '城市，如：北京', search: '搜索词，如：考研报名时间', fetch_url: '网页地址，如：https://example.com' }
+const mcpToolsRaw = ref([])
+const mcpTools = computed(() =>
+  mcpToolsRaw.value
+    .filter((t) => TOOL_LABELS[t.tool])
+    .map((t) => ({ name: t.name, tool: t.tool, label: `${TOOL_LABELS[t.tool]}（${t.name}）` }))
+)
+const currentTool = computed(() => mcpTools.value.find((t) => t.name === editForm.value.mcpTool))
+const mcpArgPlaceholder = computed(() => (currentTool.value ? TOOL_ARG_HINTS[currentTool.value.tool] || '可选参数' : '可选参数'))
 
 const currentTasks = computed(() => tasks.value)
 const emptyText = computed(() => {
@@ -171,6 +207,12 @@ const recurrenceLabel = (recurrence) => {
 const statusLabel = (value) => (value === 'done' ? '已完成' : value === 'cancelled' ? '已取消' : value)
 
 const actionLabel = (task) => {
+  if (task.actionType === 'mcp') {
+    const match = /"tool"\s*:\s*"([^"]+)"/.exec(task.actionConfig || '')
+    if (!match) return 'MCP'
+    const short = match[1].replace('mcp_info_', '').replace('mcp_notes_', '')
+    return `MCP · ${TOOL_LABELS[short] || short}`
+  }
   if (task.actionType === 'webhook') {
     const match = /"url"\s*:\s*"([^"]+)"/.exec(task.actionConfig || '')
     return match ? `Webhook · ${match[1].replace(/^https?:\/\//, '').slice(0, 28)}` : 'Webhook'
@@ -246,14 +288,49 @@ const handleDelete = async (task) => {
   }
 }
 
+const buildActionConfig = (form) => {
+  if (form.actionType === 'webhook') {
+    return JSON.stringify({ url: form.webhookUrl })
+  }
+  if (form.actionType === 'mcp') {
+    const tool = mcpTools.value.find((t) => t.name === form.mcpTool)
+    const key = tool ? TOOL_ARG_KEYS[tool.tool] : ''
+    const args = key && form.mcpArg ? { [key]: form.mcpArg } : {}
+    return JSON.stringify({ tool: form.mcpTool, args })
+  }
+  return null
+}
+
+const loadMcpTools = async () => {
+  try {
+    const res = await listMcpTools()
+    mcpToolsRaw.value = res.data || []
+  } catch (e) {
+    mcpToolsRaw.value = []
+  }
+}
+
+const readActionConfig = (task) => {
+  if (task.actionType !== 'mcp') return { mcpTool: '', mcpArg: '' }
+  try {
+    const cfg = JSON.parse(task.actionConfig || '{}')
+    const args = cfg.args || {}
+    const key = Object.keys(args)[0]
+    return { mcpTool: cfg.tool || '', mcpArg: key ? String(args[key]) : '' }
+  } catch (e) {
+    return { mcpTool: '', mcpArg: '' }
+  }
+}
+
 const openEdit = (task) => {
   const match = /"url"\s*:\s*"([^"]+)"/.exec(task.actionConfig || '')
   editForm.value = {
     id: task.id,
     version: task.version,
     title: task.title,
-    actionType: task.actionType === 'webhook' ? 'webhook' : 'notify',
-    webhookUrl: match ? match[1] : ''
+    actionType: ['webhook', 'mcp'].includes(task.actionType) ? task.actionType : 'notify',
+    webhookUrl: match ? match[1] : '',
+    ...readActionConfig(task)
   }
   editVisible.value = true
 }
@@ -264,13 +341,24 @@ const handleSave = async () => {
     ElMessage.warning('Webhook 地址要以 http:// 或 https:// 开头')
     return
   }
+  if (form.actionType === 'mcp') {
+    if (!form.mcpTool) {
+      ElMessage.warning('先选一个要查询的工具')
+      return
+    }
+    const tool = mcpTools.value.find((t) => t.name === form.mcpTool)
+    if (tool && tool.tool === 'fetch_url' && !/^https?:\/\//.test(form.mcpArg || '')) {
+      ElMessage.warning('网页地址要以 http:// 或 https:// 开头')
+      return
+    }
+  }
   saving.value = true
   try {
     await updateTask(form.id, {
       version: form.version,
       title: form.title,
       actionType: form.actionType,
-      actionConfig: form.actionType === 'webhook' ? JSON.stringify({ url: form.webhookUrl }) : null
+      actionConfig: buildActionConfig(form)
     })
     ElMessage.success('已保存')
     editVisible.value = false
@@ -282,7 +370,10 @@ const handleSave = async () => {
   }
 }
 
-onMounted(loadTasks)
+onMounted(() => {
+  loadTasks()
+  loadMcpTools()
+})
 </script>
 
 <style scoped>

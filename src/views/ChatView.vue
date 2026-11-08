@@ -14,9 +14,6 @@
       :tasks-by-status="tasksByStatus"
       :tasks-loading="tasksLoading"
       :acting-task-id="actingTaskId"
-      :memories="memories"
-      :memories-loading="memoriesLoading"
-      :acting-memory-id="actingMemoryId"
       @new-chat="newChat"
       @select="selectChat"
       @rename="handleRename"
@@ -24,8 +21,6 @@
       @refresh-tasks="loadTasks"
       @complete-task="handleCompleteTask"
       @delete-task="handleDeleteTask"
-      @refresh-memories="loadMemories"
-      @delete-memory="handleDeleteMemory"
       @settings="router.push('/settings')"
       @logout="handleLogout"
     />
@@ -193,8 +188,6 @@ import {
   getTask,
   completeTask,
   deleteTask,
-  getMemories,
-  deleteMemory,
   getDueTasks
 } from '@/api/user'
 import { enhanceCodeBlocks, exportChatAsJSON, exportChatAsText, copyText } from '@/utils/markdown'
@@ -259,11 +252,6 @@ const tasksByStatus = reactive({
 const tasksLoading = ref(false)
 const actingTaskId = ref(null)
 let tasksFetchToken = 0
-
-const memories = ref([])
-const memoriesLoading = ref(false)
-const actingMemoryId = ref(null)
-let memoriesFetchToken = 0
 
 // ==================== MindButler 待确认弹窗 ====================
 const pendingDialog = reactive({
@@ -352,7 +340,6 @@ onMounted(async () => {
   await loadSessions()
   await loadMessages()
   loadTasks()
-  loadMemories()
   startDueReminder()
 
   window.addEventListener('resize', onResize)
@@ -471,24 +458,6 @@ const loadTasks = async () => {
     if (token === tasksFetchToken) console.error('加载任务失败', e)
   } finally {
     if (token === tasksFetchToken) tasksLoading.value = false
-  }
-}
-
-/**
- * 侧边栏记忆：拉全量后按 sessionId 在组件里分组。
- * 会话级记忆跟随会话展示，全局记忆单独固定；不再依赖 localStorage.currentSessionId。
- */
-const loadMemories = async () => {
-  const token = ++memoriesFetchToken
-  memoriesLoading.value = true
-  try {
-    const res = await getMemories(100)
-    if (token !== memoriesFetchToken) return
-    if (res?.code === 200) memories.value = res.data || []
-  } catch (e) {
-    if (token === memoriesFetchToken) console.error('加载记忆失败', e)
-  } finally {
-    if (token === memoriesFetchToken) memoriesLoading.value = false
   }
 }
 
@@ -632,35 +601,6 @@ const handleDeleteTask = async (task) => {
     }
   } finally {
     actingTaskId.value = null
-  }
-}
-
-const handleDeleteMemory = async (memory) => {
-  if (!memory?.id || actingMemoryId.value != null) return
-  try {
-    await ElMessageBox.confirm('删除后只影响后续回复，不会改写已经发生的聊天记录。确定继续吗？', '删除记忆', {
-      confirmButtonText: '删除',
-      cancelButtonText: '取消',
-      type: 'warning'
-    })
-  } catch {
-    return
-  }
-
-  actingMemoryId.value = memory.id
-  try {
-    await deleteMemory(memory.id)
-    memories.value = memories.value.filter((item) => item.id !== memory.id)
-    ElMessage.success('记忆已删除')
-  } catch (e) {
-    if (e?.code === 404) {
-      await loadMemories()
-      ElMessage.warning('记忆已不存在，已刷新')
-    } else {
-      ElMessage.error(e?.message || '删除失败')
-    }
-  } finally {
-    actingMemoryId.value = null
   }
 }
 
@@ -934,7 +874,6 @@ const onPendingResolved = (payload) => {
     scheduleIdle(() => {
       loadSessions()
       loadTasks()
-      loadMemories()
     })
   } else if (action === 'rejected') {
     // 弹窗自身展示取消状态。拒绝是幂等静默成功，不落库新消息，只刷新会话列表
@@ -1049,7 +988,6 @@ const handleSend = async () => {
         nextTick(() => enhanceCodeBlocks(messageContainer.value))
         loadSessions()
         // 文本确认/提取后记忆可能已落库；侧栏记忆直接可见，流结束后同步一次
-        loadMemories()
       },
       (error) => handleStreamError(error, aiMsg, userMsgObj, userMsg),
       abortController.value.signal,
@@ -1190,7 +1128,6 @@ const deleteChat = async (sessionId) => {
 
   // 后端删除会话会级联清理该会话的记忆与 pending，侧栏数据同步刷新，避免残留
   loadTasks()
-  loadMemories()
 
   if (currentChatId.value === sessionId) {
     if (chatSessions.value.length > 0) {
