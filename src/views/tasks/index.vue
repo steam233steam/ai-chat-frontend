@@ -14,10 +14,16 @@
           <p class="subtitle">到点自动执行：站内提醒、回调 webhook，或让 AI 去查一次数据</p>
         </div>
       </div>
-      <el-button class="refresh-btn" :loading="loading" @click="loadTasks">
-        <el-icon><Refresh /></el-icon>
-        刷新
-      </el-button>
+      <div class="header-actions">
+        <el-button type="primary" class="new-btn" @click="openCreate">
+          <el-icon><Plus /></el-icon>
+          新建任务
+        </el-button>
+        <el-button class="refresh-btn" :loading="loading" @click="loadTasks">
+          <el-icon><Refresh /></el-icon>
+          刷新
+        </el-button>
+      </div>
     </div>
 
     <div class="tasks-tabs" role="tablist">
@@ -34,10 +40,14 @@
       </button>
     </div>
 
-    <el-empty v-if="!loading && currentTasks.length === 0" :description="emptyText" />
+    <div class="tasks-search">
+      <el-input v-model="keyword" clearable placeholder="搜任务标题，比如「作业」" />
+    </div>
+
+    <el-empty v-if="!loading && visibleTasks.length === 0" :description="keyword ? '没有匹配的任务' : emptyText" />
 
     <div v-else v-loading="loading" class="tasks-list">
-      <article v-for="task in currentTasks" :key="task.id" class="task-card">
+      <article v-for="task in visibleTasks" :key="task.id" class="task-card">
         <div class="task-row">
           <div class="task-main">
             <div class="task-title-line">
@@ -152,6 +162,31 @@
         <el-button type="primary" :loading="saving" @click="handleSave">保存</el-button>
       </template>
     </el-dialog>
+    <el-dialog v-model="createVisible" title="新建任务" width="460px" align-center>
+      <p class="create-hint">用一句话说清楚就行，AI 会解析成任务，确认后落库。</p>
+      <el-input
+        v-model="createText"
+        type="textarea"
+        :rows="3"
+        maxlength="200"
+        show-word-limit
+        placeholder="比如：明天早上九点提醒我交作业"
+        @keydown.enter.exact.prevent="handleCreate"
+      />
+      <template #footer>
+        <el-button @click="createVisible = false">取消</el-button>
+        <el-button type="primary" :loading="creating" @click="handleCreate">解析</el-button>
+      </template>
+    </el-dialog>
+
+    <TaskConfirmDialog
+      v-model:visible="pendingDialog.visible"
+      :data="pendingDialog.data"
+      :pending-id="pendingDialog.id"
+      :loading="pendingDialog.loading"
+      @resolved="handlePendingResolved"
+      @dismiss="pendingDialog.visible = false"
+    />
   </div>
 </template>
 
@@ -159,9 +194,13 @@
 import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { ArrowLeft, Loading, Refresh } from '@element-plus/icons-vue'
+import { ArrowLeft, Loading, Plus, Refresh } from '@element-plus/icons-vue'
 import { listTasks, listTaskRuns, updateTask, completeTask, deleteTask } from '@/api/task'
 import { listMcpTools } from '@/api/mcp'
+import { sendMessageStream } from '@/api/chat'
+import { getPendingAction } from '@/api/user'
+import { extractPendingId } from '@/utils/pending'
+import TaskConfirmDialog from '@/components/TaskConfirmDialog.vue'
 
 const router = useRouter()
 
@@ -234,7 +273,18 @@ const mcpTools = computed(() =>
 const currentTool = computed(() => mcpTools.value.find((t) => t.name === editForm.value.mcpTool))
 const mcpArgPlaceholder = computed(() => (currentTool.value ? TOOL_ARG_HINTS[currentTool.value.tool] || '可选参数' : '可选参数'))
 
-const currentTasks = computed(() => tasks.value)
+const keyword = ref('')
+const createVisible = ref(false)
+const creating = ref(false)
+const createText = ref('')
+const pendingDialog = ref({ visible: false, id: null, data: null, loading: false })
+
+// 搜索只在已加载的 50 条里筛，够个人用；不做后端模糊查询
+const visibleTasks = computed(() => {
+  const kw = keyword.value.trim()
+  if (!kw) return tasks.value
+  return tasks.value.filter((t) => (t.title || '').includes(kw))
+})
 const emptyText = computed(() => {
   if (status.value === 'pending') return '还没有待办任务。在聊天里说「明天九点提醒我交作业」就能建一条。'
   if (status.value === 'done') return '还没有完成的任务。'
@@ -248,8 +298,12 @@ const formatTime = (value) => {
   const pad = (n) => String(n).padStart(2, '0')
   const today = new Date()
   const sameDay = d.toDateString() === today.toDateString()
+  const tomorrow = new Date(today.getTime() + 24 * 3600 * 1000)
+  const isTomorrow = d.toDateString() === tomorrow.toDateString()
   const hm = `${pad(d.getHours())}:${pad(d.getMinutes())}`
-  return sameDay ? `今天 ${hm}` : `${d.getMonth() + 1}月${d.getDate()}日 ${hm}`
+  if (sameDay) return `今天 ${hm}`
+  if (isTomorrow) return `明天 ${hm}`
+  return `${d.getMonth() + 1}月${d.getDate()}日 ${hm}`
 }
 
 const recurrenceLabel = (recurrence, rule) => {
@@ -275,6 +329,64 @@ const actionLabel = (task) => {
     return match ? `Webhook · ${match[1].replace(/^https?:\/\//, '').slice(0, 28)}` : 'Webhook'
   }
   return '站内提醒'
+}
+
+const openCreate = () => {
+  createText.value = ''
+  createVisible.value = true
+}
+
+// 复用聊天那条意图管线：一句话 → 待确认 → 确认落库
+const handleCreate = async () => {
+  const text = createText.value.trim()
+  if (!text) {
+    ElMessage.warning('先写一句要做什么')
+    return
+  }
+  creating.value = true
+  let reply = ''
+  try {
+    const sessionId = `tasks-quick-${Date.now()}`
+    await new Promise((resolve, reject) => {
+      sendMessageStream(
+        sessionId,
+        text,
+        (chunk) => { reply += chunk },
+        resolve,
+        reject,
+        undefined,
+        undefined
+      )
+    })
+    const pendingId = extractPendingId(reply)
+    if (pendingId == null) {
+      ElMessage.warning('没解析出任务，换个说法试试，比如「明天九点提醒我交作业」')
+      return
+    }
+    createVisible.value = false
+    pendingDialog.value = { visible: true, id: pendingId, data: null, loading: true }
+    const res = await getPendingAction(pendingId)
+    if (res.code === 200 && res.data) {
+      pendingDialog.value.data = res.data
+    } else {
+      ElMessage.error('待确认内容已失效，请重新发起')
+      pendingDialog.value.visible = false
+    }
+  } catch (e) {
+    ElMessage.error(e?.message || '解析失败，稍后再试')
+  } finally {
+    creating.value = false
+    pendingDialog.value.loading = false
+  }
+}
+
+const handlePendingResolved = async (payload) => {
+  pendingDialog.value.visible = false
+  if (payload?.action === 'confirmed') {
+    ElMessage.success('任务已创建')
+    status.value = 'pending'
+    await loadTasks()
+  }
 }
 
 const loadTasks = async () => {
