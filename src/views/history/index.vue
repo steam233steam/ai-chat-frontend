@@ -1,10 +1,25 @@
 <template>
-  <div class="history-container">
+  <div class="history-shell">
+    <div v-if="isMobile && sidebarVisible" class="sidebar-mask" @click="sidebarVisible = false"></div>
+    <ChatSidebar
+      :sessions="chatHistory"
+      :current-chat-id="null"
+      :user-name="userName"
+      :visible="sidebarVisible"
+      @new-chat="goToChat"
+      @select="selectChat"
+      @rename="handleRename"
+      @delete="deleteChat"
+      @open-tasks="router.push('/tasks')"
+      @settings="router.push('/settings')"
+      @logout="handleLogout"
+    />
+
+    <div class="history-container">
     <div class="history-header">
       <div class="history-heading">
-        <el-button class="back-btn" @click="router.push('/chat')">
-          <el-icon><ArrowLeft /></el-icon>
-          返回对话
+        <el-button v-if="isMobile" class="back-btn" aria-label="打开会话列表" @click="sidebarVisible = true">
+          <el-icon><Menu /></el-icon>
         </el-button>
         <div class="title-block">
           <div class="title-row">
@@ -62,30 +77,83 @@
         </el-button>
       </motion.div>
     </div>
+    </div>
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted, onUnmounted, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
-  ArrowLeft,
   ArrowRight,
   Delete,
+  Menu,
   ChatDotRound
 } from '@element-plus/icons-vue'
 import { motion } from 'motion-v'
+import ChatSidebar from '@/components/ChatSidebar.vue'
 import { getSessions, clearSession } from '@/api/chat'
+import { getUserInfo, logout } from '@/api/user'
 
 const router = useRouter()
 const chatHistory = ref([])
 const loading = ref(false)
 
+const isMobile = ref(false)
+const sidebarVisible = ref(false)
+const userName = ref('')
+
+const updateIsMobile = () => {
+  isMobile.value = window.innerWidth <= 768
+  if (!isMobile.value) sidebarVisible.value = false
+}
+
+const handleRename = ({ sessionId, title }) => {
+  const session = chatHistory.value.find((item) => item.sessionId === sessionId)
+  if (session) session.title = title
+}
+
+const handleLogout = async () => {
+  try {
+    await ElMessageBox.confirm('确定要退出登录吗？', '提示', {
+      confirmButtonText: '确定',
+      cancelButtonText: '取消',
+      type: 'warning'
+    })
+  } catch {
+    return
+  }
+  try {
+    await logout()
+  } catch (error) {
+    console.warn('登出接口调用失败，继续本地登出', error)
+  }
+  localStorage.removeItem('token')
+  localStorage.removeItem('loginUser')
+  await router.replace('/login')
+}
+
+const loadUser = async () => {
+  try {
+    const res = await getUserInfo()
+    if (res.code === 200) userName.value = res.data?.name || ''
+  } catch (error) {
+    console.error('加载用户信息失败', error)
+  }
+}
+
 const hasHistory = computed(() => chatHistory.value.length > 0)
 
 onMounted(() => {
+  updateIsMobile()
+  window.addEventListener('resize', updateIsMobile)
   loadHistory()
+  loadUser()
+})
+
+onUnmounted(() => {
+  window.removeEventListener('resize', updateIsMobile)
 })
 
 const loadHistory = async () => {
@@ -133,7 +201,15 @@ const deleteChat = async (sessionId) => {
 </script>
 
 <style scoped>
+.history-shell {
+  display: flex;
+  height: 100vh;
+  background: var(--bg-base);
+}
+
 .history-container {
+  flex: 1;
+  min-width: 0;
   padding: 28px;
   height: 100%;
   overflow-y: auto;

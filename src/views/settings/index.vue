@@ -1,119 +1,106 @@
 <template>
-  <div class="settings-page">
-    <div class="page-header">
-      <el-button class="back-btn" @click="router.push('/chat')">
-        <el-icon><ArrowLeft /></el-icon>
-        返回对话
-      </el-button>
-      <div class="title-block">
-        <h2>设置</h2>
-        <p class="subtitle">管理你的账户与服务配置</p>
-      </div>
-    </div>
+  <div class="settings-shell">
+    <div v-if="isMobile && sidebarVisible" class="sidebar-mask" @click="sidebarVisible = false"></div>
+    <ChatSidebar
+      :sessions="sessions"
+      :current-chat-id="null"
+      :user-name="userName"
+      :visible="sidebarVisible"
+      @new-chat="goNewChat"
+      @select="goSession"
+      @rename="handleRename"
+      @delete="handleDeleteSession"
+      @open-tasks="router.push('/tasks')"
+      @settings="sidebarVisible = false"
+      @logout="handleLogout"
+    />
 
-    <div class="settings-body">
-      <!-- 外观主题 -->
-      <el-card class="card">
-        <template #header>
-          <div class="card-header-row">
-            <span class="card-title"><el-icon><Sunny /></el-icon>外观</span>
-            <el-switch
-              v-model="isDark"
-              active-text="深色"
-              inactive-text="浅色"
-              class="theme-switch"
-              :active-color="'var(--color-primary)'"
-            />
-          </div>
-        </template>
-        <p class="hint">切换界面主题，偏好会被保存在本地，下次打开自动沿用。</p>
-      </el-card>
-
-      <!-- 账户信息 -->
-      <el-card v-loading="loading" class="card">
-        <template #header>
-          <span class="card-title"><el-icon><User /></el-icon>账户信息</span>
-        </template>
-
-        <div class="account">
-          <el-avatar :size="56" class="account-avatar">{{ avatarText }}</el-avatar>
-          <div class="account-meta">
-            <div class="account-name">{{ userInfo?.name || '未登录' }}</div>
-            <div class="account-phone">{{ maskedPhone }}</div>
-          </div>
-          <el-tag v-if="userInfo?.isNewUser" type="warning" size="small">待设置密码</el-tag>
+    <div class="settings-page">
+      <div class="page-header">
+        <el-button v-if="isMobile" class="back-btn" aria-label="打开会话列表" @click="sidebarVisible = true">
+          <el-icon><Menu /></el-icon>
+        </el-button>
+        <div class="title-block">
+          <h2>设置</h2>
+          <p class="subtitle">账户与外观</p>
         </div>
+      </div>
 
-        <el-form label-width="72px" class="profile-form" @submit.prevent="saveName">
-          <el-form-item label="昵称">
+      <div class="settings-body">
+        <!-- 账户 -->
+        <section class="card" v-loading="loading">
+          <div class="account">
+            <el-avatar :size="52" class="account-avatar">{{ avatarText }}</el-avatar>
+            <div class="account-meta">
+              <div class="account-name">{{ userInfo?.name || '未登录' }}</div>
+              <div class="account-phone">{{ maskedPhone }}</div>
+            </div>
+            <el-tag v-if="userInfo?.isNewUser" type="warning" size="small" effect="light">待设置密码</el-tag>
+          </div>
+
+          <div class="field-row">
             <el-input
               v-model="name"
               maxlength="20"
               show-word-limit
-              placeholder="请输入昵称"
+              placeholder="输入昵称"
               @keyup.enter="saveName"
             />
-          </el-form-item>
-          <el-form-item>
-            <el-button
-              type="primary"
-              :loading="saving"
-              :disabled="!canSave"
-              @click="saveName"
-            >
-              保存昵称
+            <el-button type="primary" :loading="saving" :disabled="!canSave" @click="saveName">
+              保存
             </el-button>
-          </el-form-item>
-        </el-form>
-      </el-card>
+          </div>
 
-      <!-- 服务信息 -->
-      <el-card class="card">
-        <template #header>
-          <span class="card-title"><el-icon><Connection /></el-icon>服务信息</span>
-        </template>
-        <el-descriptions :column="1" border>
-          <el-descriptions-item label="接口地址">{{ apiBaseUrl }}</el-descriptions-item>
-          <el-descriptions-item label="AI 模型">多模型路由（Ollama / DeepSeek），白名单由后端统一配置</el-descriptions-item>
-          <el-descriptions-item label="会话存储">MySQL 持久化 + Redis 热缓存，历史消息支持游标分页</el-descriptions-item>
-        </el-descriptions>
-        <p class="hint">
-          接口地址取自 <code>.env</code> 的 <code>VITE_API_BASE_URL</code>；模型与密钥由后端管理，前端不再单独保存。
-        </p>
-      </el-card>
+          <div class="card-footer">
+            <el-button text class="footer-link" @click="gotoHistory">
+              对话历史
+              <el-icon><ArrowRight /></el-icon>
+            </el-button>
+            <el-button type="danger" plain :loading="loggingOut" @click="handleLogout">退出登录</el-button>
+          </div>
+        </section>
 
-      <!-- 其他 -->
-      <el-card class="card">
-        <template #header>
-          <span class="card-title"><el-icon><MoreFilled /></el-icon>其他</span>
-        </template>
-        <div class="actions">
-          <el-button @click="router.push('/history')">
-            <el-icon><Clock /></el-icon>
-            对话历史
-          </el-button>
-          <el-button type="danger" plain :loading="loggingOut" @click="handleLogout">
-            <el-icon><SwitchButton /></el-icon>
-            退出登录
-          </el-button>
-        </div>
-        <p class="hint">
-          会话、任务与记忆已统一到聊天侧边栏：会话级记忆跟随会话展示，全局记忆置顶，任务全账号共享。
-        </p>
-      </el-card>
+        <!-- 外观 -->
+        <section class="card">
+          <div class="section-title">外观</div>
+          <div class="theme-options">
+            <button
+              class="theme-option"
+              :class="{ active: !isDark }"
+              type="button"
+              @click="setTheme('light')"
+            >
+              <el-icon><Sunny /></el-icon>
+              浅色
+            </button>
+            <button
+              class="theme-option"
+              :class="{ active: isDark }"
+              type="button"
+              @click="setTheme('dark')"
+            >
+              <el-icon><Moon /></el-icon>
+              深色
+            </button>
+          </div>
+        </section>
+      </div>
     </div>
   </div>
 </template>
 
 <script setup>
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { ArrowLeft, Clock, SwitchButton, Sunny, User, Connection, MoreFilled } from '@element-plus/icons-vue'
+import { ArrowRight, Menu, Moon, Sunny } from '@element-plus/icons-vue'
+import ChatSidebar from '@/components/ChatSidebar.vue'
 import { getUserInfo, updateProfile, logout } from '@/api/user'
+import { getSessions, clearSession } from '@/api/chat'
 import { useTheme } from '@/composables/useTheme'
 
 const router = useRouter()
+const { isDark, set } = useTheme()
 
 const userInfo = ref(null)
 const name = ref('')
@@ -121,26 +108,31 @@ const loading = ref(false)
 const saving = ref(false)
 const loggingOut = ref(false)
 
-const { isDark } = useTheme()
+const isMobile = ref(false)
+const sidebarVisible = ref(false)
+const sessions = ref([])
+const userName = ref('')
 
-// 开发环境走 Vite 代理，生产环境走 nginx 同源反代（前端请求固定是 /api）
-const apiBaseUrl = import.meta.env.DEV
-  ? `${import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080'}（Vite 代理）`
-  : `${window.location.origin}/api（同源反代）`
+const updateIsMobile = () => {
+  isMobile.value = window.innerWidth <= 768
+  if (!isMobile.value) sidebarVisible.value = false
+}
 
 const avatarText = computed(() => userInfo.value?.name?.charAt(0) || 'U')
 
 const maskedPhone = computed(() => {
   const phone = userInfo.value?.phone || ''
-  return /^\d{11}$/.test(phone)
-    ? phone.replace(/^(\d{3})\d{4}(\d{4})$/, '$1****$2')
-    : phone
+  return /^\d{11}$/.test(phone) ? phone.replace(/^(\d{3})\d{4}(\d{4})$/, '$1****$2') : phone
 })
 
 const canSave = computed(() => {
   const trimmed = name.value.trim()
   return trimmed.length > 0 && trimmed !== (userInfo.value?.name || '')
 })
+
+const setTheme = (value) => set(value)
+
+const gotoHistory = () => router.push('/history')
 
 const loadUser = async () => {
   loading.value = true
@@ -149,36 +141,73 @@ const loadUser = async () => {
     if (res.code === 200) {
       userInfo.value = res.data
       name.value = res.data?.name || ''
+      userName.value = res.data?.name || ''
       localStorage.setItem('loginUser', JSON.stringify(res.data))
     }
   } catch (error) {
-    console.error('加载用户信息失败', error)
     ElMessage.error(error?.message || '加载用户信息失败')
   } finally {
     loading.value = false
   }
 }
 
+const loadSessions = async () => {
+  try {
+    const res = await getSessions()
+    if (res.code === 200) sessions.value = res.data || []
+  } catch (error) {
+    console.error('加载会话列表失败', error)
+  }
+}
+
 const saveName = async () => {
   const trimmed = name.value.trim()
   if (!trimmed || saving.value) return
-
-  if (trimmed.length > 20) {
-    ElMessage.warning('昵称不能超过 20 个字符')
-    return
-  }
-
   saving.value = true
   try {
     await updateProfile(trimmed)
     userInfo.value = { ...userInfo.value, name: trimmed }
-    name.value = trimmed
+    userName.value = trimmed
     localStorage.setItem('loginUser', JSON.stringify(userInfo.value))
     ElMessage.success('昵称已更新')
   } catch (error) {
     ElMessage.error(error?.message || '保存失败，请稍后重试')
   } finally {
     saving.value = false
+  }
+}
+
+const goNewChat = () => {
+  sidebarVisible.value = false
+  router.push('/chat')
+}
+
+const goSession = (sessionId) => {
+  sidebarVisible.value = false
+  if (sessionId) router.push(`/chat/${sessionId}`)
+}
+
+const handleRename = ({ sessionId, title }) => {
+  const session = sessions.value.find((item) => item.sessionId === sessionId)
+  if (session) session.title = title
+}
+
+const handleDeleteSession = async (sessionId) => {
+  try {
+    await ElMessageBox.confirm('删除后该对话、消息和本会话记忆不可恢复，确定继续吗？', '提示', {
+      confirmButtonText: '确定',
+      cancelButtonText: '取消',
+      type: 'warning'
+    })
+  } catch {
+    return
+  }
+  try {
+    await clearSession(sessionId)
+    sessions.value = sessions.value.filter((item) => item.sessionId !== sessionId)
+    ElMessage.success('对话已删除')
+  } catch (error) {
+    ElMessage.error(error?.message || '删除会话失败')
   }
 }
 
@@ -197,126 +226,104 @@ const handleLogout = async () => {
   try {
     await logout()
   } catch (error) {
-    // 后端 Token 可能已失效，本地照样清理
-    console.error('登出接口失败', error)
+    console.warn('登出接口调用失败，继续本地登出', error)
   } finally {
     localStorage.removeItem('token')
     localStorage.removeItem('loginUser')
     loggingOut.value = false
     ElMessage.success('已退出登录')
-    router.push('/login')
+    await router.replace('/login')
   }
 }
 
 onMounted(() => {
+  updateIsMobile()
+  window.addEventListener('resize', updateIsMobile)
   loadUser()
+  loadSessions()
+})
+
+onUnmounted(() => {
+  window.removeEventListener('resize', updateIsMobile)
 })
 </script>
 
 <style scoped>
+.settings-shell {
+  display: flex;
+  height: 100vh;
+  background: var(--bg-base);
+}
+
 .settings-page {
+  flex: 1;
+  min-width: 0;
   height: 100%;
   overflow-y: auto;
-  background: var(--bg-base);
   padding: 24px;
   box-sizing: border-box;
 }
 
 .page-header {
-  max-width: 760px;
-  margin-left: auto;
-  margin-right: auto;
+  max-width: 640px;
+  margin: 0 auto 20px;
   display: flex;
   align-items: center;
-  gap: 14px;
-  margin-bottom: 24px;
-  padding-bottom: 18px;
-  border-bottom: 1px solid var(--border-subtle);
-}
-
-.back-btn {
-  color: var(--text-secondary);
-  border-radius: 10px;
-  padding: 8px 12px;
-  transition: all 0.2s;
-}
-
-.back-btn:hover {
-  background: var(--bg-surface-soft);
-  color: var(--color-primary);
+  gap: 10px;
 }
 
 .title-block h2 {
   margin: 0;
-  font-size: 22px;
+  font-size: 21px;
   font-weight: 700;
   color: var(--text-primary);
 }
 
 .title-block .subtitle {
-  margin: 4px 0 0;
+  margin: 3px 0 0;
   font-size: 13px;
   color: var(--text-tertiary);
+}
+
+.back-btn {
+  color: var(--text-secondary);
+  border-radius: 10px;
+  padding: 8px 10px;
 }
 
 .settings-body {
   display: flex;
   flex-direction: column;
-  gap: 16px;
-  max-width: 760px;
-  margin-left: auto;
-  margin-right: auto;
+  gap: 14px;
+  max-width: 640px;
+  margin: 0 auto;
 }
 
 .card {
-  background: var(--bg-surface) !important;
-  border: 1px solid var(--border-subtle) !important;
-  border-radius: 16px !important;
-  box-shadow: var(--shadow-sm);
-  overflow: hidden;
-  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: 16px;
+  padding: 20px;
 }
 
-.card:hover {
-  border-color: var(--color-primary-soft) !important;
-  box-shadow: var(--shadow-md);
-}
-
-.card-header-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-
-.card-title {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 15px;
+.section-title {
+  font-size: 13px;
   font-weight: 600;
-  color: var(--text-primary);
-}
-
-.card-title .el-icon {
-  color: var(--color-primary);
-}
-
-.theme-switch {
-  --el-switch-on-color: var(--color-primary);
+  color: var(--text-tertiary);
+  letter-spacing: 0.02em;
+  margin-bottom: 14px;
 }
 
 .account {
   display: flex;
   align-items: center;
-  gap: 16px;
-  margin-bottom: 20px;
+  gap: 14px;
 }
 
 .account-avatar {
   background: linear-gradient(135deg, var(--color-primary) 0%, #8b5cf6 100%);
-  font-size: 22px;
+  font-size: 20px;
   color: #fff;
-  box-shadow: 0 4px 14px rgba(99, 102, 241, 0.4);
 }
 
 .account-meta {
@@ -333,69 +340,91 @@ onMounted(() => {
 .account-phone {
   font-size: 13px;
   color: var(--text-tertiary);
-  margin-top: 4px;
+  margin-top: 3px;
 }
 
-.profile-form {
-  max-width: 420px;
-}
-
-.hint {
-  margin: 12px 0 0;
-  font-size: 12px;
-  color: var(--text-tertiary);
-  line-height: 1.6;
-}
-
-.hint code {
-  background: var(--code-inline-bg);
-  color: var(--code-inline-text);
-  padding: 1px 5px;
-  border-radius: 4px;
-  font-size: 11px;
-}
-
-.actions {
+.field-row {
   display: flex;
-  flex-wrap: wrap;
-  gap: 12px;
+  gap: 10px;
+  margin-top: 18px;
 }
 
-:deep(.el-card__header) {
-  padding: 16px 20px;
+.card-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 18px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border-subtle);
 }
 
-:deep(.el-card__body) {
-  padding: 20px;
+.footer-link {
+  color: var(--text-secondary);
+  padding: 0;
 }
 
-:deep(.el-descriptions__label) {
-  color: var(--text-tertiary) !important;
+.footer-link:hover {
+  color: var(--color-primary);
 }
 
-:deep(.el-descriptions__content) {
-  color: var(--text-primary) !important;
+.theme-options {
+  display: flex;
+  gap: 10px;
 }
 
-:deep(.el-descriptions__cell) {
-  border-color: var(--border-subtle) !important;
+.theme-option {
+  flex: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  height: 42px;
+  border-radius: 12px;
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-surface-soft);
+  color: var(--text-secondary);
+  font-size: 14px;
+  cursor: pointer;
+  transition: border-color 0.15s ease, color 0.15s ease, background 0.15s ease;
 }
 
-:deep(.el-descriptions__title) {
-  color: var(--text-primary);
+.theme-option:hover {
+  border-color: var(--color-primary-soft);
 }
 
-:deep(.el-descriptions) {
-  --el-descriptions-item-bordered-label-background: var(--bg-surface-soft);
-}
-
-:deep(.el-descriptions__body) {
-  background: var(--bg-surface);
+.theme-option.active {
+  border-color: var(--color-primary);
+  color: var(--color-primary);
+  background: var(--color-primary-soft-bg, rgba(99, 102, 241, 0.08));
+  font-weight: 600;
 }
 
 @media (max-width: 768px) {
   .settings-page {
-    padding: 18px;
+    padding: 16px 14px 28px;
+  }
+
+  .card {
+    padding: 16px;
+  }
+
+  .field-row {
+    flex-wrap: nowrap;
+  }
+
+  .card-footer {
+    flex-direction: column-reverse;
+    align-items: stretch;
+  }
+
+  .card-footer .el-button {
+    width: 100%;
+    margin-left: 0;
+  }
+
+  .footer-link {
+    justify-content: center;
   }
 }
 </style>
