@@ -17,20 +17,23 @@ export const getModels = async () => {
 // modelName         —— 可选，模型名（白名单内），不传用默认模型
 export const sendMessageStream = async (sessionId, question, onChunk, onComplete, onError, signal, modelName) => {
   const token = localStorage.getItem('token')
-  let url = `/api/chat/ask-stream?sessionid=${encodeURIComponent(sessionId)}&question=${encodeURIComponent(question)}`
+  // POST + JSON：问题不进 query string，避免 URL 长度限制和网关访问日志留原文
+  const payload = { sessionid: sessionId, question }
   if (modelName) {
-    url += `&modelName=${encodeURIComponent(modelName)}`
+    payload.modelName = modelName
   }
 
   let response
   try {
-    response = await fetch(url, {
-      method: 'GET',
+    response = await fetch('/api/chat/ask-stream', {
+      method: 'POST',
       headers: {
         'Accept': 'text/event-stream',
+        'Content-Type': 'application/json',
         'Cache-Control': 'no-cache',
         ...(token ? { 'Authorization': token } : {}),
       },
+      body: JSON.stringify(payload),
       signal,
     })
   } catch (err) {
