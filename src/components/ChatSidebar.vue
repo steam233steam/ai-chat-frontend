@@ -19,74 +19,72 @@
       />
     </div>
 
-    <template>
-      <div class="sidebar-section-title">
-        <span>最近对话</span>
-        <span class="session-count">{{ filteredSessions.length }}</span>
+  <div class="sidebar-section-title">
+      <span>最近对话</span>
+      <span class="session-count">{{ filteredSessions.length }}</span>
+    </div>
+    <div class="chat-list">
+      <div
+        v-if="filteredSessions.length === 0"
+        class="empty-sessions"
+      >
+        <el-icon :size="30"><Search v-if="sessionQuery" /><ChatLineSquare v-else /></el-icon>
+        <p>{{ sessionQuery ? '没有匹配的对话' : '暂无对话记录' }}</p>
+        <span>{{ sessionQuery ? '换个关键词试试' : '点击上方“新对话”开始' }}</span>
       </div>
-      <div class="chat-list">
+
+      <div
+        v-for="session in filteredSessions"
+        :key="session.sessionId"
+        class="session-block"
+      >
         <div
-          v-if="filteredSessions.length === 0"
-          class="empty-sessions"
+          :class="['chat-item', { active: currentChatId === session.sessionId }]"
+          @click="selectSession(session.sessionId)"
+          @contextmenu.prevent="showMenu(session)"
         >
-          <el-icon :size="30"><Search v-if="sessionQuery" /><ChatLineSquare v-else /></el-icon>
-          <p>{{ sessionQuery ? '没有匹配的对话' : '暂无对话记录' }}</p>
-          <span>{{ sessionQuery ? '换个关键词试试' : '点击上方“新对话”开始' }}</span>
-        </div>
-
-        <div
-          v-for="session in filteredSessions"
-          :key="session.sessionId"
-          class="session-block"
-        >
-          <div
-            :class="['chat-item', { active: currentChatId === session.sessionId }]"
-            @click="selectSession(session.sessionId)"
-            @contextmenu.prevent="showMenu(session)"
-          >
-            <el-icon class="chat-icon"><ChatDotRound /></el-icon>
-            <div class="chat-title-wrap">
-              <div class="chat-title-row">
-                <span class="chat-title" v-if="editingId !== session.sessionId">{{ session.title }}</span>
-              </div>
-              <span v-if="session.model" class="session-model-tag" :title="'锁定模型：' + session.model">{{ session.model }}</span>
+          <el-icon class="chat-icon"><ChatDotRound /></el-icon>
+          <div class="chat-title-wrap">
+            <div class="chat-title-row">
+              <span class="chat-title" v-if="editingId !== session.sessionId">{{ session.title }}</span>
             </div>
+            <span v-if="session.model" class="session-model-tag" :title="'锁定模型：' + session.model">{{ session.model }}</span>
+          </div>
 
-            <div v-if="editingId === session.sessionId" class="edit-box" @click.stop>
-              <input
-                v-model="editingTitle"
-                class="edit-input"
-                maxlength="50"
-                @keyup.enter="saveTitle(session.sessionId)"
-                @keyup.escape="cancelEditing"
-              />
-              <span v-if="editingTitle.length > 40" class="title-limit-tip">{{ 50 - editingTitle.length }}</span>
-              <button class="save-btn" @click="saveTitle(session.sessionId)">
-                <el-icon><Check /></el-icon>
-              </button>
-              <button class="cancel-btn" @click="cancelEditing">
-                <el-icon><Close /></el-icon>
-              </button>
-            </div>
-
-            <button class="more-btn" @click.stop="showMenu(session)">
-              <el-icon><More /></el-icon>
+          <div v-if="editingId === session.sessionId" class="edit-box" @click.stop>
+            <input
+              v-model="editingTitle"
+              class="edit-input"
+              maxlength="50"
+              @keyup.enter="saveTitle(session.sessionId)"
+              @keyup.escape="cancelEditing"
+            />
+            <span v-if="editingTitle.length > 40" class="title-limit-tip">{{ 50 - editingTitle.length }}</span>
+            <button class="save-btn" @click="saveTitle(session.sessionId)">
+              <el-icon><Check /></el-icon>
             </button>
+            <button class="cancel-btn" @click="cancelEditing">
+              <el-icon><Close /></el-icon>
+            </button>
+          </div>
 
-            <div v-if="menuId === session.sessionId" class="context-menu" @click.stop>
-              <div class="context-menu-item" @click="beginEdit(session)">
-                <el-icon><Edit /></el-icon>
-                <span>重命名</span>
-              </div>
-              <div class="context-menu-item delete" @click="removeSession(session.sessionId)">
-                <el-icon><Delete /></el-icon>
-                <span>删除</span>
-              </div>
+          <button class="more-btn" @click.stop="showMenu(session)">
+            <el-icon><More /></el-icon>
+          </button>
+
+          <div v-if="menuId === session.sessionId" class="context-menu" @click.stop>
+            <div class="context-menu-item" @click="beginEdit(session)">
+              <el-icon><Edit /></el-icon>
+              <span>重命名</span>
+            </div>
+            <div class="context-menu-item delete" @click="removeSession(session.sessionId)">
+              <el-icon><Delete /></el-icon>
+              <span>删除</span>
             </div>
           </div>
         </div>
-      </div>
-    </template>
+        </div>
+    </div>
 
     <div class="sidebar-footer">
       <button class="tasks-entry" type="button" @click="emit('open-tasks')">
