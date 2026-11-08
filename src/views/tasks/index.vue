@@ -1145,6 +1145,40 @@ onBeforeUnmount(() => {
 }
 
 @media (max-width: 768px) {
+  /* 移动端所有状态共用同一套卡片格式：标题/元信息在上，操作按钮整行平分在下 */
+  .task-card {
+    padding: 12px 12px 6px;
+  }
+
+  .task-row {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 6px;
+  }
+
+  .task-meta {
+    gap: 6px;
+    margin-top: 6px;
+  }
+
+  .task-actions {
+    width: 100%;
+    gap: 0;
+    padding-top: 4px;
+    border-top: 1px solid var(--border-subtle);
+  }
+
+  .task-actions :deep(.el-button) {
+    flex: 1;
+    margin: 0;
+    padding: 6px 0;
+    font-size: 12.5px;
+  }
+
+  .task-title {
+    font-size: 14.5px;
+  }
+
   .tasks-shell .tasks-container {
     padding: 16px 14px 40px;
   }

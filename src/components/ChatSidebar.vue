@@ -902,17 +902,23 @@ onUnmounted(() => document.removeEventListener('click', hideMenu))
   width: 100%;
   margin-bottom: 10px;
   padding: 9px 12px;
-  border: 1px solid var(--border-soft, #e5e7eb);
+  border: 1px solid rgba(255, 255, 255, 0.14);
   border-radius: 10px;
-  background: transparent;
-  color: var(--text-primary, #1f2937);
+  background: rgba(255, 255, 255, 0.07);
+  color: var(--text-sidebar, #e5e7eb);
   font-size: 13px;
   cursor: pointer;
-  transition: background 0.15s ease, border-color 0.15s ease;
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+.tasks-entry .el-icon {
+  color: var(--color-primary-soft, #a5b4fc);
+  font-size: 15px;
 }
 
 .tasks-entry:hover {
-  background: var(--bg-hover, #f3f4f6);
-  border-color: var(--border-strong, #d1d5db);
+  background: rgba(129, 140, 248, 0.16);
+  border-color: rgba(129, 140, 248, 0.55);
+  color: #fff;
 }
 </style>
