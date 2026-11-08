@@ -46,26 +46,9 @@
           <el-icon class="chat-icon"><ChatDotRound /></el-icon>
           <div class="chat-title-wrap">
             <div class="chat-title-row">
-              <span class="chat-title" v-if="editingId !== session.sessionId">{{ session.title }}</span>
+              <span class="chat-title">{{ session.title }}</span>
             </div>
             <span v-if="session.model" class="session-model-tag" :title="'锁定模型：' + session.model">{{ session.model }}</span>
-          </div>
-
-          <div v-if="editingId === session.sessionId" class="edit-box" @click.stop>
-            <input
-              v-model="editingTitle"
-              class="edit-input"
-              maxlength="50"
-              @keyup.enter="saveTitle(session.sessionId)"
-              @keyup.escape="cancelEditing"
-            />
-            <span v-if="editingTitle.length > 40" class="title-limit-tip">{{ 50 - editingTitle.length }}</span>
-            <button class="save-btn" @click="saveTitle(session.sessionId)">
-              <el-icon><Check /></el-icon>
-            </button>
-            <button class="cancel-btn" @click="cancelEditing">
-              <el-icon><Close /></el-icon>
-            </button>
           </div>
 
           <button class="more-btn" @click.stop="showMenu(session)">
@@ -105,6 +88,30 @@
         </el-button>
       </div>
     </div>
+
+    <!-- 重命名：用弹窗，避免在窄侧栏里塞输入框（手机端尤其挤） -->
+    <el-dialog
+      v-model="renameVisible"
+      title="重命名对话"
+      width="min(420px, 88vw)"
+      append-to-body
+      align-center
+      class="rename-dialog"
+      @opened="focusRenameInput"
+    >
+      <el-input
+        ref="renameInputRef"
+        v-model="renameTitle"
+        maxlength="50"
+        show-word-limit
+        placeholder="给这段对话起个名字"
+        @keyup.enter="submitRename"
+      />
+      <template #footer>
+        <el-button @click="renameVisible = false">取消</el-button>
+        <el-button type="primary" :loading="renameSaving" @click="submitRename">保存</el-button>
+      </template>
+    </el-dialog>
   </aside>
 </template>
 
@@ -116,8 +123,6 @@ import {
   Calendar,
   ChatDotRound,
   ChatLineSquare,
-  Check,
-  Close,
   Collection,
   Delete,
   Edit,
@@ -147,9 +152,13 @@ const emit = defineEmits([
 ])
 
 const sessionQuery = ref('')
-const editingId = ref(null)
-const editingTitle = ref('')
 const menuId = ref(null)
+
+const renameVisible = ref(false)
+const renameTarget = ref(null)
+const renameTitle = ref('')
+const renameSaving = ref(false)
+const renameInputRef = ref(null)
 
 const filteredSessions = computed(() => {
   const keyword = sessionQuery.value.trim().toLowerCase()
@@ -180,34 +189,36 @@ const showMenu = (session) => {
 
 const beginEdit = (session) => {
   hideMenu()
-  editingId.value = session.sessionId
-  editingTitle.value = session.title
+  renameTarget.value = session
+  renameTitle.value = session.title || ''
+  renameVisible.value = true
 }
 
-const cancelEditing = () => {
-  editingId.value = null
-  editingTitle.value = ''
+const focusRenameInput = () => {
+  const input = renameInputRef.value?.input
+  input?.focus()
+  input?.select()
 }
 
-const saveTitle = async (sessionId) => {
-  const title = editingTitle.value.trim()
+const submitRename = async () => {
+  const sessionId = renameTarget.value?.sessionId
+  const title = renameTitle.value.trim()
+  if (!sessionId || renameSaving.value) return
   if (!title) {
-    cancelEditing()
-    return
-  }
-  if (title.length > 50) {
-    ElMessage.warning('标题不能超过 50 个字符')
+    ElMessage.warning('标题不能为空')
     return
   }
 
+  renameSaving.value = true
   try {
     await updateTitle(sessionId, title)
     emit('rename', { sessionId, title })
     ElMessage.success('标题已更新')
-    cancelEditing()
+    renameVisible.value = false
   } catch (e) {
-    console.error('更新标题失败', e)
     ElMessage.error(e?.message || '更新标题失败')
+  } finally {
+    renameSaving.value = false
   }
 }
 
@@ -784,72 +795,6 @@ onUnmounted(() => document.removeEventListener('click', hideMenu))
   color: var(--color-danger);
 }
 
-.edit-box {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  flex: 1;
-}
-
-.edit-input {
-  flex: 1;
-  background: rgba(255, 255, 255, 0.12);
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  outline: none;
-  color: #fff;
-  font-size: 13px;
-  min-width: 0;
-  padding: 4px 8px;
-  border-radius: 6px;
-}
-
-.edit-input:focus {
-  border-color: var(--color-primary-soft);
-}
-
-.title-limit-tip {
-  font-size: 12px;
-  color: var(--text-sidebar-soft);
-  flex-shrink: 0;
-}
-
-.save-btn, .cancel-btn {
-  width: 24px;
-  height: 24px;
-  border: none;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  transition: all 0.2s;
-  padding: 0;
-  flex-shrink: 0;
-}
-
-.save-btn {
-  background: rgba(34, 197, 94, 0.25);
-  color: var(--color-success);
-}
-
-.save-btn:hover {
-  background: var(--color-success);
-  color: #fff;
-}
-
-.cancel-btn {
-  background: rgba(239, 68, 68, 0.25);
-  color: var(--color-danger);
-}
-
-.cancel-btn:hover {
-  background: var(--color-danger);
-  color: #fff;
-}
-
-.save-btn .el-icon, .cancel-btn .el-icon {
-  font-size: 12px;
-}
 
 
 @media (max-width: 768px) {
