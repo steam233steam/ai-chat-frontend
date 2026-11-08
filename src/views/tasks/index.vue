@@ -9,7 +9,7 @@
         <div class="title-block">
           <div class="title-row">
             <h2>任务闹钟</h2>
-            <span class="tasks-count">{{ currentTasks.length }}</span>
+            <span class="tasks-count">{{ visibleTasks.length }}</span>
           </div>
           <p class="subtitle">到点自动执行：站内提醒、回调 webhook，或让 AI 去查一次数据</p>
         </div>
@@ -784,5 +784,42 @@ onMounted(() => {
   margin: 6px 0 0;
   font-size: 12px;
   color: var(--text-tertiary);
+}
+
+.header-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.tasks-search {
+  margin-bottom: 12px;
+}
+
+.create-hint {
+  margin: 0 0 10px;
+  color: var(--text-secondary, #666);
+  font-size: 13px;
+}
+
+@media (max-width: 640px) {
+  .tasks-header {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 12px;
+  }
+
+  .tasks-heading {
+    justify-content: space-between;
+  }
+
+  .header-actions {
+    width: 100%;
+  }
+
+  .header-actions .el-button {
+    flex: 1;
+    margin-left: 0;
+  }
 }
 </style>
