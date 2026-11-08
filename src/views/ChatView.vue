@@ -54,9 +54,12 @@
           <el-button size="small" circle class="header-action" :title="isDark ? '切换为浅色' : '切换为深色'" @click="toggle">
             <el-icon><Sunny v-if="isDark" /><Moon v-else /></el-icon>
           </el-button>
-          <!-- 历史 / 设置入口 -->
+          <!-- 历史 / 任务 / 设置入口 -->
           <el-button size="small" circle class="header-action desktop-action" title="历史记录" @click="router.push('/history')">
             <el-icon><Clock /></el-icon>
+          </el-button>
+          <el-button size="small" circle class="header-action desktop-action" title="任务闹钟" @click="router.push('/tasks')">
+            <el-icon><Calendar /></el-icon>
           </el-button>
           <el-button size="small" circle class="header-action desktop-action" title="设置" @click="router.push('/settings')">
             <el-icon><Setting /></el-icon>
@@ -85,6 +88,7 @@
             <template #dropdown>
               <el-dropdown-menu>
                 <el-dropdown-item command="history">历史记录</el-dropdown-item>
+                <el-dropdown-item command="tasks">任务闹钟</el-dropdown-item>
                 <el-dropdown-item command="settings">设置</el-dropdown-item>
                 <el-dropdown-item command="export-json">导出 JSON</el-dropdown-item>
                 <el-dropdown-item command="export-text">导出文本</el-dropdown-item>
@@ -177,7 +181,7 @@ import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox, ElNotification } from 'element-plus'
 import {
   Menu, Delete, ArrowDown, SwitchButton, Download, Loading,
-  Clock, Setting, MoreFilled, Bell
+  Clock, Setting, MoreFilled, Bell, Calendar
 } from '@element-plus/icons-vue'
 import { sendMessageStream, getSessions, getHistory, clearSession, getModels } from '@/api/chat'
 import {
@@ -1206,6 +1210,9 @@ const handleMobileCommand = (command) => {
   switch (command) {
     case 'history':
       router.push('/history')
+      break
+    case 'tasks':
+      router.push('/tasks')
       break
     case 'settings':
       router.push('/settings')

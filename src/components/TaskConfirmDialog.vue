@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <Teleport to="body">
     <Transition name="mb-dialog">
       <div
@@ -256,7 +256,7 @@ const actionLabel = (action) => {
 const memoryKeyLabel = (key) => {
   const map = {
     style: '回答风格',
-    goal: '目标',
+    fact: '事实',
     schedule: '作息',
     relation: '称呼/关系'
   }

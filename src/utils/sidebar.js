@@ -1,8 +1,8 @@
-import { formatDueAt, formatRecurrence } from './pending.js'
+﻿import { formatDueAt, formatRecurrence } from './pending.js'
 
 const MEMORY_KEY_LABELS = {
   style: '回答风格',
-  goal: '目标',
+  fact: '事实',
   schedule: '作息',
   relation: '关系'
 }

@@ -37,6 +37,12 @@ const routes = [
         name: 'Settings',
         component: () => import('@/views/settings/index.vue'),
         meta: { title: '设置', needAuth: true }
+      },
+      {
+        path: 'tasks',
+        name: 'Tasks',
+        component: () => import('@/views/tasks/index.vue'),
+        meta: { title: '任务闹钟', needAuth: true }
       }
     ]
   },
