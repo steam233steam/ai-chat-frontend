@@ -125,7 +125,7 @@ const formatTime = (timestamp) => {
 .message {
   display: flex;
   gap: 12px;
-  max-width: 82%;
+  max-width: 88%;
   animation: messageIn 0.4s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
@@ -288,7 +288,7 @@ const formatTime = (timestamp) => {
 
 @media (max-width: 768px) {
   .message {
-    max-width: 94%;
+    max-width: 96%;
   }
 }
 

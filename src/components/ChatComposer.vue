@@ -26,7 +26,6 @@
           </span>
         </div>
         <div class="composer-meta">
-          <span class="composer-shortcut">Enter 发送 · Shift + Enter 换行</span>
           <span class="composer-count" :class="{ over: overLimit }">
             {{ modelValue.length }} / {{ maxLength }}
           </span>
@@ -36,10 +35,10 @@
         <el-input
           :model-value="modelValue"
           type="textarea"
-          :rows="3"
-          :placeholder="disabled ? '请先在弹窗中确认或取消任务…' : '输入消息，开始新的对话...'"
+          :rows="2"
+          :placeholder="disabled ? '请先在弹窗中确认或取消任务…' : '输入消息，开始新的对话...（Enter 发送，Shift+Enter 换行）'"
           :disabled="disabled"
-          :autosize="{ minRows: 3, maxRows: 8 }"
+          :autosize="{ minRows: 2, maxRows: 8 }"
           class="message-input"
           autocomplete="off"
           @update:model-value="emit('update:modelValue', $event)"
@@ -106,17 +105,17 @@ const onEnterKey = (event) => {
 .chat-input {
   position: relative;
   z-index: 5;
-  padding: 10px 24px 18px;
+  padding: 8px 20px 12px;
   background: linear-gradient(180deg, transparent 0%, var(--bg-base) 62%);
 }
 
 .composer {
   width: 100%;
-  max-width: 900px;
+  max-width: 1120px;
   margin: 0 auto;
-  padding: 12px 14px;
+  padding: 8px 10px;
   border: 1px solid var(--border-subtle);
-  border-radius: 20px;
+  border-radius: 16px;
   background: var(--bg-surface);
   box-shadow: var(--shadow-md);
   transition: border-color 0.25s ease, box-shadow 0.25s ease;
@@ -140,7 +139,7 @@ const onEnterKey = (event) => {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding: 2px 4px 10px;
+  padding: 0 2px 6px;
 }
 
 .model-selector {
@@ -156,12 +155,12 @@ const onEnterKey = (event) => {
 }
 
 .model-select {
-  width: 180px;
+  width: 152px;
 }
 
 .model-select :deep(.el-select__wrapper) {
-  min-height: 32px;
-  border-radius: 10px;
+  min-height: 28px;
+  border-radius: 9px;
   border: 1px solid transparent;
   background: var(--bg-surface-soft);
   box-shadow: none !important;
@@ -223,14 +222,14 @@ const onEnterKey = (event) => {
 }
 
 .message-input :deep(.el-textarea__inner) {
-  min-height: 64px;
-  padding: 6px 6px 8px;
+  min-height: 44px;
+  padding: 2px 4px 4px;
   border: none !important;
   background: transparent !important;
   box-shadow: none !important;
   color: var(--text-primary);
-  font-size: 14.5px;
-  line-height: 1.6;
+  font-size: 14px;
+  line-height: 1.55;
   resize: none;
 }
 
@@ -247,9 +246,9 @@ const onEnterKey = (event) => {
 
 .send-btn,
 .stop-btn {
-  height: 42px;
-  padding: 0 18px;
-  border-radius: 12px;
+  height: 34px;
+  padding: 0 14px;
+  border-radius: 10px;
   font-weight: 500;
   flex-shrink: 0;
   transition: all 0.2s;
@@ -280,12 +279,12 @@ const onEnterKey = (event) => {
 
 @media (max-width: 768px) {
   .chat-input {
-    padding: 8px 12px 12px;
+    padding: 6px 10px 10px;
   }
 
   .composer {
-    padding: 10px 12px;
-    border-radius: 18px;
+    padding: 6px 8px;
+    border-radius: 14px;
   }
 
   .composer-toolbar {

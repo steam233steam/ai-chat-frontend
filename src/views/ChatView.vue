@@ -1124,15 +1124,15 @@ const handleLogout = async () => {
 }
 
 .chat-header {
-  height: 60px;
+  height: 54px;
   background: var(--bg-header);
   backdrop-filter: var(--glass-blur);
   -webkit-backdrop-filter: var(--glass-blur);
   border-bottom: 1px solid var(--border-subtle);
   display: flex;
   align-items: center;
-  padding: 0 20px;
-  gap: 12px;
+  padding: 0 16px;
+  gap: 10px;
   z-index: 5;
 }
 
@@ -1213,10 +1213,10 @@ const handleLogout = async () => {
 .chat-messages {
   flex: 1;
   overflow-y: auto;
-  padding: 28px 24px;
+  padding: 14px 20px;
   display: flex;
   flex-direction: column;
-  gap: 22px;
+  gap: 14px;
   min-height: 0;
 }
 
@@ -1256,11 +1256,11 @@ const handleLogout = async () => {
 
 .messages-stack {
   width: 100%;
-  max-width: 900px;
+  max-width: 1120px;
   margin: 0 auto;
   display: flex;
   flex-direction: column;
-  gap: 22px;
+  gap: 16px;
 }
 
 /* 待确认任务提醒条（弹窗点“稍后处理”后显示） */
@@ -1270,8 +1270,8 @@ const handleLogout = async () => {
   display: flex;
   align-items: center;
   gap: 11px;
-  width: calc(100% - 48px);
-  max-width: 900px;
+  width: calc(100% - 40px);
+  max-width: 1120px;
   margin: 0 auto 4px;
   padding: 10px 12px;
   border: 1px solid rgba(var(--color-primary-rgb), 0.2);
@@ -1398,7 +1398,7 @@ const handleLogout = async () => {
   }
 
   .chat-messages {
-    padding: 18px 12px;
+    padding: 10px 10px;
   }
 
   .pending-banner {
@@ -1411,7 +1411,7 @@ const handleLogout = async () => {
   }
 
   .messages-stack {
-    gap: 18px;
+    gap: 12px;
   }
 
   .scroll-bottom-btn {
