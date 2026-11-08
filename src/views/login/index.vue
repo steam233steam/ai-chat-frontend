@@ -218,7 +218,79 @@
 
           <div class="login-method-switch">
             <span>没有账号？</span>
+            <el-button link @click="switchToRegister">免费注册</el-button>
+            <span class="switch-divider">·</span>
             <el-button link @click="switchToCodeLogin">验证码登录</el-button>
+          </div>
+        </el-form>
+
+        <!-- 步骤4: 手机号 + 密码注册（不需要短信验证码） -->
+        <el-form
+          v-else-if="currentStep === 4"
+          ref="registerFormRef"
+          :model="registerForm"
+          :rules="registerRules"
+          class="login-form"
+          autocomplete="off"
+        >
+          <div class="step-tip">
+            <el-icon :size="18"><InfoFilled /></el-icon>
+            <div>
+              <div>手机号 + 密码即可注册，不用等短信</div>
+              <div class="step-tip-sub">注册成功会自动登录</div>
+            </div>
+          </div>
+
+          <el-form-item prop="phone">
+            <el-input
+              v-model="registerForm.phone"
+              placeholder="请输入手机号"
+              :prefix-icon="Iphone"
+              maxlength="11"
+              autocomplete="off"
+              size="large"
+            />
+          </el-form-item>
+
+          <el-form-item prop="password">
+            <el-input
+              v-model="registerForm.password"
+              type="password"
+              placeholder="设置密码（4-32位字母/数字/下划线）"
+              :prefix-icon="Lock"
+              show-password
+              autocomplete="new-password"
+              size="large"
+            />
+          </el-form-item>
+
+          <el-form-item prop="confirmPassword">
+            <el-input
+              v-model="registerForm.confirmPassword"
+              type="password"
+              placeholder="请再次输入密码"
+              :prefix-icon="Lock"
+              show-password
+              autocomplete="new-password"
+              size="large"
+              @keyup.enter="handleRegister"
+            />
+          </el-form-item>
+
+          <el-form-item>
+            <el-button
+              type="primary"
+              class="login-btn"
+              :loading="loading"
+              @click="handleRegister"
+            >
+              注册并登录
+            </el-button>
+          </el-form-item>
+
+          <div class="login-method-switch">
+            <span>已有账号？</span>
+            <el-button link @click="currentStep = 3">去登录</el-button>
           </div>
         </el-form>
       </Transition>
@@ -236,6 +308,7 @@ import {
   sendVerificationCode,
   loginWithCode,
   loginWithPassword,
+  register,
   setPassword,
   getUserInfo
 } from '@/api/user'
@@ -251,6 +324,7 @@ let timer = null
 const phoneFormRef = ref()
 const passwordFormRef = ref()
 const passwordLoginFormRef = ref()
+const registerFormRef = ref()
 
 const phoneForm = reactive({
   phone: '',
@@ -267,6 +341,12 @@ const passwordForm = reactive({
 const passwordLoginForm = reactive({
   phone: '',
   password: ''
+})
+
+const registerForm = reactive({
+  phone: '',
+  password: '',
+  confirmPassword: ''
 })
 
 const phoneRules = {
@@ -311,6 +391,30 @@ const passwordLoginRules = {
   ],
   password: [
     { required: true, message: '请输入密码', trigger: 'blur' }
+  ]
+}
+
+const registerRules = {
+  phone: [
+    { required: true, message: '请输入手机号', trigger: 'blur' },
+    { pattern: /^1[3-9]\d{9}$/, message: '手机号格式不正确', trigger: 'blur' }
+  ],
+  password: [
+    { required: true, message: '请设置密码', trigger: 'blur' },
+    { pattern: /^[A-Za-z0-9_]{4,32}$/, message: '密码需为4-32位字母、数字或下划线', trigger: 'blur' }
+  ],
+  confirmPassword: [
+    { required: true, message: '请再次输入密码', trigger: 'blur' },
+    {
+      validator: (rule, value, callback) => {
+        if (value !== registerForm.password) {
+          callback(new Error('两次输入密码不一致'))
+        } else {
+          callback()
+        }
+      },
+      trigger: 'blur'
+    }
   ]
 }
 
@@ -493,6 +597,41 @@ const switchToPasswordLogin = () => {
 const switchToCodeLogin = () => {
   stepTransition.value = 'step-slide-right'
   currentStep.value = 1
+}
+
+const switchToRegister = () => {
+  stepTransition.value = 'step-slide-left'
+  currentStep.value = 4
+}
+
+// 手机号 + 密码注册：成功后直接写 token 并进聊天页
+const handleRegister = async () => {
+  if (!registerFormRef.value) return
+  await registerFormRef.value.validate(async (valid) => {
+    if (!valid) return
+    loading.value = true
+    try {
+      const res = await register(registerForm.phone, registerForm.password)
+      if (res.code !== 200) {
+        ElMessage.error(res.message || '注册失败')
+        return
+      }
+      localStorage.setItem('token', res.data)
+
+      const meRes = await getUserInfo()
+      if (meRes.code === 200) {
+        localStorage.setItem('loginUser', JSON.stringify(meRes.data))
+      }
+
+      ElMessage.success('注册成功，已为你登录')
+      router.push('/chat')
+    } catch (error) {
+      // 429 限流 / 手机号已注册都会走到这里，后端 message 已经是给人看的文案
+      ElMessage.error(error?.message || '注册失败，请稍后重试')
+    } finally {
+      loading.value = false
+    }
+  })
 }
 
 onUnmounted(() => {

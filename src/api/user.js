@@ -29,6 +29,15 @@ export const loginWithPassword = (phone, password) => {
 }
 
 /**
+ * 手机号 + 密码注册（不需要短信验证码）
+ * @param {string} phone - 手机号
+ * @param {string} password - 密码
+ */
+export const register = (phone, password) => {
+  return api.post('/user/register', { phone, password })
+}
+
+/**
  * 设置密码（首次登录后）
  * @param {string} phone - 手机号
  * @param {string} code - 验证码
