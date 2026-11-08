@@ -26,6 +26,32 @@
       </div>
     </div>
 
+    <div class="stats-row">
+      <button
+        v-for="stat in stats"
+        :key="stat.key"
+        type="button"
+        :class="['stat-card', stat.tone, { active: stat.filter && statFilter === stat.filter }]"
+        @click="applyStatFilter(stat)"
+      >
+        <span class="stat-value">{{ stat.value }}</span>
+        <span class="stat-label">{{ stat.label }}</span>
+      </button>
+    </div>
+
+    <div class="quick-create">
+      <el-icon class="quick-icon"><Plus /></el-icon>
+      <input
+        ref="quickInput"
+        v-model="createText"
+        class="quick-input"
+        maxlength="200"
+        placeholder="一句话新建：明天九点提醒我交作业 / 每周一早上查北京天气"
+        @keydown.enter.exact.prevent="handleCreate"
+      />
+      <el-button type="primary" :loading="creating" @click="handleCreate">解析</el-button>
+    </div>
+
     <div class="tasks-tabs" role="tablist">
       <button
         v-for="tab in tabs"
@@ -47,7 +73,12 @@
     <el-empty v-if="!loading && visibleTasks.length === 0" :description="keyword ? '没有匹配的任务' : emptyText" />
 
     <div v-else v-loading="loading" class="tasks-list">
-      <article v-for="task in visibleTasks" :key="task.id" class="task-card">
+      <section v-for="group in groups" :key="group.key" class="task-group">
+        <div class="group-head">
+          <span :class="['group-label', group.tone]">{{ group.label }}</span>
+          <span class="group-count">{{ group.items.length }}</span>
+        </div>
+        <article v-for="task in group.items" :key="task.id" class="task-card">
         <div class="task-row">
           <div class="task-main">
             <div class="task-title-line">
@@ -102,7 +133,8 @@
             </li>
           </ul>
         </div>
-      </article>
+        </article>
+      </section>
     </div>
 
     <el-dialog v-model="editVisible" title="任务设置" width="420px" align-center>
@@ -162,23 +194,6 @@
         <el-button type="primary" :loading="saving" @click="handleSave">保存</el-button>
       </template>
     </el-dialog>
-    <el-dialog v-model="createVisible" title="新建任务" width="460px" align-center>
-      <p class="create-hint">用一句话说清楚就行，AI 会解析成任务，确认后落库。</p>
-      <el-input
-        v-model="createText"
-        type="textarea"
-        :rows="3"
-        maxlength="200"
-        show-word-limit
-        placeholder="比如：明天早上九点提醒我交作业"
-        @keydown.enter.exact.prevent="handleCreate"
-      />
-      <template #footer>
-        <el-button @click="createVisible = false">取消</el-button>
-        <el-button type="primary" :loading="creating" @click="handleCreate">解析</el-button>
-      </template>
-    </el-dialog>
-
     <TaskConfirmDialog
       v-model:visible="pendingDialog.visible"
       :data="pendingDialog.data"
@@ -274,7 +289,8 @@ const currentTool = computed(() => mcpTools.value.find((t) => t.name === editFor
 const mcpArgPlaceholder = computed(() => (currentTool.value ? TOOL_ARG_HINTS[currentTool.value.tool] || '可选参数' : '可选参数'))
 
 const keyword = ref('')
-const createVisible = ref(false)
+const quickInput = ref(null)
+const statFilter = ref('')
 const creating = ref(false)
 const createText = ref('')
 const pendingDialog = ref({ visible: false, id: null, data: null, loading: false })
@@ -285,6 +301,75 @@ const visibleTasks = computed(() => {
   if (!kw) return tasks.value
   return tasks.value.filter((t) => (t.title || '').includes(kw))
 })
+// 概览：已到期 / 今天 / 本周 / 待办总数
+const startOfDay = (offset = 0) => {
+  const d = new Date()
+  d.setHours(0, 0, 0, 0)
+  d.setDate(d.getDate() + offset)
+  return d.getTime()
+}
+const pendingList = computed(() => (status.value === 'pending' ? tasks.value : []))
+const stats = computed(() => {
+  const now = Date.now()
+  const todayEnd = startOfDay(1)
+  const weekEnd = startOfDay(7)
+  const list = pendingList.value
+  return [
+    { key: 'overdue', label: '已到期', tone: 'danger', value: list.filter((t) => t.dueAt && new Date(t.dueAt).getTime() <= now).length, filter: 'overdue' },
+    { key: 'today', label: '今天', tone: 'warn', value: list.filter((t) => t.dueAt && new Date(t.dueAt).getTime() > now && new Date(t.dueAt).getTime() < todayEnd).length, filter: 'today' },
+    { key: 'week', label: '本周', tone: 'normal', value: list.filter((t) => t.dueAt && new Date(t.dueAt).getTime() >= todayEnd && new Date(t.dueAt).getTime() < weekEnd).length, filter: 'week' },
+    { key: 'all', label: '待办', tone: 'plain', value: list.length, filter: '' }
+  ]
+})
+
+const applyStatFilter = (stat) => {
+  statFilter.value = stat.filter
+  if (status.value !== 'pending') status.value = 'pending'
+}
+
+// 按时间分组：已到期 / 今天 / 明天 / 本周 / 以后
+const groups = computed(() => {
+  const list = visibleTasks.value
+  if (status.value !== 'pending') {
+    return [{ key: 'all', label: status.value === 'done' ? '已完成' : '已取消', tone: 'plain', items: list }]
+  }
+
+  const now = Date.now()
+  const todayEnd = startOfDay(1)
+  const tomorrowEnd = startOfDay(2)
+  const weekEnd = startOfDay(7)
+  const buckets = {
+    overdue: [], today: [], tomorrow: [], week: [], later: [], none: []
+  }
+  for (const t of list) {
+    const ts = t.dueAt ? new Date(t.dueAt).getTime() : NaN
+    if (Number.isNaN(ts)) { buckets.none.push(t); continue }
+    if (ts <= now) buckets.overdue.push(t)
+    else if (ts < todayEnd) buckets.today.push(t)
+    else if (ts < tomorrowEnd) buckets.tomorrow.push(t)
+    else if (ts < weekEnd) buckets.week.push(t)
+    else buckets.later.push(t)
+  }
+  const defs = [
+    { key: 'overdue', label: '已到期', tone: 'danger' },
+    { key: 'today', label: '今天', tone: 'warn' },
+    { key: 'tomorrow', label: '明天', tone: 'normal' },
+    { key: 'week', label: '本周', tone: 'normal' },
+    { key: 'later', label: '以后', tone: 'plain' },
+    { key: 'none', label: '不限时间', tone: 'plain' }
+  ]
+  let out = defs
+    .filter((d) => buckets[d.key].length)
+    .map((d) => ({ ...d, items: buckets[d.key] }))
+
+  if (statFilter.value === 'overdue') out = out.filter((g) => g.key === 'overdue')
+  else if (statFilter.value === 'today') out = out.filter((g) => g.key === 'today')
+  else if (statFilter.value === 'week') out = out.filter((g) => ['today', 'tomorrow', 'week'].includes(g.key))
+
+  if (!out.length && list.length) return [{ key: 'all', label: '全部待办', tone: 'plain', items: list }]
+  return out
+})
+
 const emptyText = computed(() => {
   if (status.value === 'pending') return '还没有待办任务。在聊天里说「明天九点提醒我交作业」就能建一条。'
   if (status.value === 'done') return '还没有完成的任务。'
@@ -332,8 +417,7 @@ const actionLabel = (task) => {
 }
 
 const openCreate = () => {
-  createText.value = ''
-  createVisible.value = true
+  quickInput.value?.focus()
 }
 
 // 复用聊天那条意图管线：一句话 → 待确认 → 确认落库
@@ -363,7 +447,7 @@ const handleCreate = async () => {
       ElMessage.warning('没解析出任务，换个说法试试，比如「明天九点提醒我交作业」')
       return
     }
-    createVisible.value = false
+    createText.value = ''
     pendingDialog.value = { visible: true, id: pendingId, data: null, loading: true }
     const res = await getPendingAction(pendingId)
     if (res.code === 200 && res.data) {
@@ -820,6 +904,118 @@ onMounted(() => {
   .header-actions .el-button {
     flex: 1;
     margin-left: 0;
+  }
+}
+
+.stats-row {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.stat-card {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 10px 12px;
+  border: 1px solid var(--border-soft, #e5e7eb);
+  border-radius: 12px;
+  background: var(--bg-surface, #fff);
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.stat-card:hover {
+  border-color: var(--color-primary-soft, #a5b4fc);
+}
+
+.stat-card.active {
+  border-color: var(--color-primary, #6366f1);
+  box-shadow: 0 0 0 1px var(--color-primary, #6366f1);
+}
+
+.stat-value {
+  font-size: 20px;
+  font-weight: 600;
+  color: var(--text-primary, #111827);
+  line-height: 1.1;
+}
+
+.stat-label {
+  font-size: 12px;
+  color: var(--text-tertiary, #6b7280);
+}
+
+.stat-card.danger .stat-value { color: #dc2626; }
+.stat-card.warn .stat-value { color: #d97706; }
+
+.quick-create {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px 8px 12px;
+  margin-bottom: 12px;
+  border: 1px solid var(--border-strong, #d1d5db);
+  border-radius: 12px;
+  background: var(--bg-surface, #fff);
+}
+
+.quick-create:focus-within {
+  border-color: var(--color-primary, #6366f1);
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.12);
+}
+
+.quick-icon {
+  color: var(--text-tertiary, #6b7280);
+}
+
+.quick-input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  outline: none;
+  background: transparent;
+  font-size: 14px;
+  color: var(--text-primary, #111827);
+}
+
+.quick-input::placeholder {
+  color: var(--text-tertiary, #9ca3af);
+}
+
+.task-group + .task-group {
+  margin-top: 18px;
+}
+
+.group-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+  font-size: 13px;
+  color: var(--text-secondary, #4b5563);
+}
+
+.group-label {
+  font-weight: 600;
+}
+
+.group-label.danger { color: #dc2626; }
+.group-label.warn { color: #d97706; }
+
+.group-count {
+  padding: 0 7px;
+  border-radius: 999px;
+  background: var(--bg-hover, #f3f4f6);
+  font-size: 12px;
+  color: var(--text-tertiary, #6b7280);
+}
+
+@media (max-width: 640px) {
+  .stats-row {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 </style>

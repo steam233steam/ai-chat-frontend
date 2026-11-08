@@ -48,8 +48,9 @@
           <el-button size="small" circle class="header-action desktop-action" title="历史记录" @click="router.push('/history')">
             <el-icon><Clock /></el-icon>
           </el-button>
-          <el-button size="small" circle class="header-action desktop-action" title="任务闹钟" @click="router.push('/tasks')">
+          <el-button size="small" class="header-action task-entry desktop-action" title="任务闹钟" @click="router.push('/tasks')">
             <el-icon><Calendar /></el-icon>
+            <span>任务</span>
           </el-button>
           <el-button size="small" circle class="header-action desktop-action" title="设置" @click="router.push('/settings')">
             <el-icon><Setting /></el-icon>
@@ -1433,5 +1434,13 @@ const handleLogout = async () => {
     backdrop-filter: none;
     -webkit-backdrop-filter: none;
   }
+}
+
+.task-entry {
+  width: auto;
+  padding: 0 12px;
+  gap: 5px;
+  display: inline-flex;
+  align-items: center;
 }
 </style>
