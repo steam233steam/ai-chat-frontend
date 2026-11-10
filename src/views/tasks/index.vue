@@ -107,6 +107,9 @@
               <span class="task-chip">{{ recurrenceLabel(task.recurrence, task.recurrenceRule) }}</span>
               <span class="task-chip action">{{ actionLabel(task) }}</span>
               <span v-if="task.overdue" class="task-chip danger">已到期</span>
+              <span v-if="task.recurrence !== 'once' && task.completedAt" class="task-chip done-once">
+                上次完成 {{ shortTime(task.completedAt) }}
+              </span>
               <span v-if="task.status !== 'pending'" class="task-chip muted">{{ statusLabel(task.status) }}</span>
             </div>
           </div>
@@ -118,7 +121,7 @@
               :loading="actingId === task.id"
               @click="handleComplete(task)"
             >
-              完成
+              {{ task.recurrence === 'once' ? '完成' : '完成本次' }}
             </el-button>
             <el-button text size="small" @click="toggleRuns(task)">
               {{ expandedId === task.id ? '收起记录' : '执行记录' }}
@@ -140,10 +143,12 @@
           </div>
           <ul v-else class="runs-list">
             <li v-for="run in runs" :key="run.id" class="run-item">
-              <span :class="['run-status', run.status]">{{ run.status === 'success' ? '成功' : '失败' }}</span>
-              <span class="run-time">{{ formatTime(run.startedAt) }}</span>
-              <span class="run-action">{{ actionName(run.actionType) }}</span>
-              <span class="run-detail">{{ run.detail }}</span>
+              <div class="run-head">
+                <span :class="['run-status', run.status]">{{ run.status === 'success' ? '成功' : '失败' }}</span>
+                <span class="run-time">{{ formatTime(run.startedAt) }}</span>
+                <span class="run-action">{{ actionName(run.actionType) }}</span>
+              </div>
+              <pre class="run-detail">{{ run.detail }}</pre>
             </li>
           </ul>
         </div>
@@ -533,6 +538,14 @@ const formatTime = (value) => {
   return `${d.getMonth() + 1}月${d.getDate()}日 ${hm}`
 }
 
+const shortTime = (value) => {
+  if (!value) return ''
+  const d = new Date(value)
+  if (Number.isNaN(d.getTime())) return value
+  const pad = (n) => String(n).padStart(2, '0')
+  return `${d.getMonth() + 1}/${d.getDate()} ${pad(d.getHours())}:${pad(d.getMinutes())}`
+}
+
 const recurrenceLabel = (recurrence, rule) => {
   if (recurrence === 'daily') return '每天'
   if (recurrence === 'weekly') {
@@ -662,9 +675,15 @@ const toggleRuns = async (task) => {
 const handleComplete = async (task) => {
   actingId.value = task.id
   try {
-    await completeTask(task.id, task.version)
-    ElMessage.success(task.recurrence === 'once' ? '已完成' : '已完成，已滚到下一次')
+    const res = await completeTask(task.id, task.version)
+    const vo = res?.data
+    if (task.recurrence === 'once') {
+      ElMessage.success('已完成')
+    } else {
+      ElMessage.success(`已完成本次，下次 ${formatTime(vo?.dueAt)}`)
+    }
     await loadTasks()
+    if (expandedId.value === task.id) await toggleRuns(task)
   } catch (e) {
     ElMessage.error(e?.message || '操作失败')
   } finally {
@@ -991,6 +1010,11 @@ onBeforeUnmount(() => {
   background: rgba(239, 68, 68, 0.1);
 }
 
+.task-chip.done-once {
+  color: #16a34a;
+  background: rgba(22, 163, 74, 0.1);
+}
+
 .task-actions {
   display: flex;
   gap: 4px;
@@ -1027,9 +1051,19 @@ onBeforeUnmount(() => {
 
 .run-item {
   display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: rgba(127, 127, 127, 0.06);
+  color: var(--text-secondary);
+}
+
+.run-head {
+  display: flex;
   gap: 10px;
   align-items: baseline;
-  color: var(--text-secondary);
+  flex-wrap: wrap;
 }
 
 .run-status {
@@ -1050,11 +1084,20 @@ onBeforeUnmount(() => {
   flex: none;
 }
 
+.run-action {
+  color: var(--text-tertiary);
+}
+
 .run-detail {
+  margin: 0;
   color: var(--text-secondary);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  font-family: inherit;
+  font-size: 12px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 340px;
+  overflow-y: auto;
 }
 
 .edit-field {
