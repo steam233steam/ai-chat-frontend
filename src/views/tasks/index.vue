@@ -189,6 +189,7 @@
           <el-option label="推到手机（横幅通知）" value="push" />
           <el-option label="调用 Webhook" value="webhook" />
           <el-option label="让 AI 查点东西（MCP 工具）" value="mcp" />
+          <el-option label="查询后推送到手机（动作链）" value="chain" />
         </el-select>
       </div>
       <div v-if="editForm.actionType === 'push'" class="edit-field">
@@ -243,6 +244,45 @@
           :placeholder="mcpArgPlaceholder"
         />
         <p class="field-hint">到点会调用这个工具，把结果写进执行记录并提醒你。</p>
+      </div>
+      <div v-if="editForm.actionType === 'chain'" class="edit-field">
+        <label>第一步：查什么</label>
+        <el-select v-model="editForm.mcpTool" style="width: 100%" placeholder="选一个工具">
+          <el-option v-for="tool in mcpTools" :key="tool.name" :label="tool.label" :value="tool.name" />
+        </el-select>
+        <el-input
+          v-if="editForm.mcpTool"
+          v-model="editForm.mcpArg"
+          style="margin-top: 8px"
+          :placeholder="mcpArgPlaceholder"
+        />
+        <label style="margin-top: 12px">第二步：推到哪</label>
+        <el-select v-model="editForm.pushChannel" style="width: 100%">
+          <el-option label="Server酱（微信通知，推荐）" value="serverchan" />
+          <el-option label="PushPlus（微信通知）" value="pushplus" />
+          <el-option label="ntfy（安卓 App）" value="ntfy" />
+          <el-option label="Bark（iOS）" value="bark" />
+          <el-option label="企业微信群机器人" value="wecom" />
+        </el-select>
+        <el-input
+          v-if="editForm.pushChannel === 'ntfy'"
+          v-model="editForm.pushTopic"
+          style="margin-top: 8px"
+          placeholder="主题，例如 mindbutler-233"
+        />
+        <el-input
+          v-else-if="editForm.pushChannel === 'serverchan' || editForm.pushChannel === 'pushplus'"
+          v-model="editForm.pushKey"
+          style="margin-top: 8px"
+          :placeholder="editForm.pushChannel === 'serverchan' ? 'SendKey，SCT 开头' : 'PushPlus 的 token'"
+        />
+        <el-input
+          v-else
+          v-model="editForm.pushTarget"
+          style="margin-top: 8px"
+          :placeholder="editForm.pushChannel === 'bark' ? 'https://api.day.app/你的KEY' : '群机器人 webhook 地址'"
+        />
+        <p class="field-hint">到点先查一次，再把查询结果发到你的手机。查询失败就不推送。</p>
       </div>
       <template #footer>
         <el-button @click="editVisible = false">取消</el-button>
@@ -558,6 +598,15 @@ const recurrenceLabel = (recurrence, rule) => {
 const statusLabel = (value) => (value === 'done' ? '已完成' : value === 'cancelled' ? '已取消' : value)
 
 const actionLabel = (task) => {
+  if (task.actionType === 'chain') {
+    try {
+      const steps = JSON.parse(task.actionConfig || '{}').steps || []
+      const pushStep = steps.find((s) => s.type === 'push') || {}
+      return '查询 → ' + (pushStep.channel === 'serverchan' || pushStep.channel === 'pushplus' ? '微信' : pushStep.channel || '推送')
+    } catch (e) {
+      return '动作链'
+    }
+  }
   if (task.actionType === 'push') {
     try {
       const cfg = JSON.parse(task.actionConfig || '{}')
@@ -726,6 +775,25 @@ const buildActionConfig = (form) => {
     }
     return JSON.stringify({ channel: form.pushChannel, target: form.pushTarget.trim() })
   }
+  if (form.actionType === 'chain') {
+    const tool = mcpTools.value.find((t) => t.name === form.mcpTool)
+    const key = tool ? TOOL_ARG_KEYS[tool.tool] : ''
+    const args = key && form.mcpArg ? { [key]: form.mcpArg } : {}
+    const pushStep =
+      form.pushChannel === 'serverchan'
+        ? { channel: 'serverchan', sendkey: (form.pushKey || '').trim() }
+        : form.pushChannel === 'pushplus'
+          ? { channel: 'pushplus', token: (form.pushKey || '').trim() }
+          : form.pushChannel === 'ntfy'
+            ? { channel: 'ntfy', server: 'https://ntfy.sh', topic: (form.pushTopic || '').trim() }
+            : { channel: form.pushChannel, target: (form.pushTarget || '').trim() }
+    return JSON.stringify({
+      steps: [
+        { id: 's1', type: 'mcp', tool: form.mcpTool, args },
+        { id: 's2', type: 'push', ...pushStep, content: '{{s1}}' }
+      ]
+    })
+  }
   if (form.actionType === 'mcp') {
     const tool = mcpTools.value.find((t) => t.name === form.mcpTool)
     const key = tool ? TOOL_ARG_KEYS[tool.tool] : ''
@@ -756,6 +824,25 @@ const readActionConfig = (task) => {
       }
     } catch (e) {
       return { pushChannel: 'ntfy', pushTopic: '', pushTarget: '' }
+    }
+  }
+  if (task.actionType === 'chain') {
+    try {
+      const cfg = JSON.parse(task.actionConfig || '{}')
+      const steps = cfg.steps || []
+      const mcpStep = steps.find((s) => s.type === 'mcp') || {}
+      const pushStep = steps.find((s) => s.type === 'push') || {}
+      const argKey = Object.keys(mcpStep.args || {})[0]
+      return {
+        mcpTool: mcpStep.tool || '',
+        mcpArg: argKey ? String(mcpStep.args[argKey]) : '',
+        pushChannel: pushStep.channel || 'serverchan',
+        pushTopic: pushStep.topic || '',
+        pushTarget: pushStep.target || '',
+        pushKey: pushStep.sendkey || pushStep.token || ''
+      }
+    } catch (e) {
+      return { mcpTool: '', mcpArg: '' }
     }
   }
   if (task.actionType !== 'mcp') return { mcpTool: '', mcpArg: '' }
