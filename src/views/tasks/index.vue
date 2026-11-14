@@ -198,6 +198,7 @@
           <el-option label="推到手机（横幅通知）" value="push" />
           <el-option label="调用 Webhook" value="webhook" />
           <el-option label="让 AI 查点东西（MCP 工具）" value="mcp" />
+          <el-option label="AI 查询（自己换词多搜几次再总结）" value="agent" />
           <el-option label="查询后推送到手机（动作链）" value="chain" />
         </el-select>
       </div>
@@ -448,7 +449,7 @@ const weekdays = [
 const WEEKDAY_LABELS = Object.fromEntries(weekdays.map((d) => [d.value, d.label]))
 
 // 只读展示用：动作类型的中文名
-const ACTION_NAMES = { notify: '站内提醒', webhook: 'Webhook', mcp: 'AI 查询', push: '手机推送' }
+const ACTION_NAMES = { notify: '站内提醒', webhook: 'Webhook', mcp: 'MCP 查询', push: '手机推送', chain: '动作链', agent: 'AI 查询' }
 const actionName = (value) => ACTION_NAMES[value] || value || '-'
 
 const PUSH_CHANNEL_NAMES = { serverchan: '微信', pushplus: '微信', ntfy: 'ntfy', bark: 'Bark', wecom: '企业微信' }
