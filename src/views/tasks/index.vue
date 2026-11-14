@@ -123,6 +123,15 @@
             >
               {{ task.recurrence === 'once' ? '完成' : '完成本次' }}
             </el-button>
+            <el-button
+              v-if="task.status === 'pending'"
+              text
+              size="small"
+              :loading="runningId === task.id"
+              @click="handleRunNow(task)"
+            >
+              立即运行
+            </el-button>
             <el-button text size="small" @click="toggleRuns(task)">
               {{ expandedId === task.id ? '收起记录' : '执行记录' }}
             </el-button>
@@ -309,7 +318,7 @@ import { Loading, Menu, Plus, Refresh } from '@element-plus/icons-vue'
 import ChatSidebar from '@/components/ChatSidebar.vue'
 import { getSessions, clearSession, updateTitle } from '@/api/chat'
 import { getUserInfo, logout } from '@/api/user'
-import { listTasks, listTaskRuns, updateTask, completeTask, deleteTask } from '@/api/task'
+import { listTasks, listTaskRuns, updateTask, completeTask, deleteTask, runTaskNow } from '@/api/task'
 import { listMcpTools } from '@/api/mcp'
 import { sendMessageStream } from '@/api/chat'
 import { getPendingAction } from '@/api/user'
@@ -403,6 +412,7 @@ const status = ref('pending')
 const tasks = ref([])
 const loading = ref(false)
 const actingId = ref(null)
+const runningId = ref(null)
 const expandedId = ref(null)
 const runs = ref([])
 const runsLoading = ref(false)
@@ -737,6 +747,39 @@ const handleComplete = async (task) => {
     ElMessage.error(e?.message || '操作失败')
   } finally {
     actingId.value = null
+  }
+}
+
+const handleRunNow = async (task) => {
+  runningId.value = task.id
+  try {
+    const res = await runTaskNow(task.id)
+    const run = res?.data
+    if (run?.status === 'success') {
+      ElMessage.success('已运行，结果记在「执行记录」里')
+    } else {
+      ElMessage.warning(`运行了，但失败了：${run?.detail || '未知原因'}`)
+    }
+    expandedId.value = task.id
+    await loadRuns(task.id)
+    await loadTasks()
+  } catch (e) {
+    ElMessage.error(e?.message || '运行失败')
+  } finally {
+    runningId.value = null
+  }
+}
+
+const loadRuns = async (id) => {
+  runsLoading.value = true
+  try {
+    const res = await listTaskRuns(id, 20)
+    runs.value = res.data || []
+  } catch (e) {
+    ElMessage.error('执行记录加载失败')
+    runs.value = []
+  } finally {
+    runsLoading.value = false
   }
 }
 

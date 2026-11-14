@@ -13,6 +13,9 @@ export const listTaskRuns = (id, limit = 20) => {
   return api.get(`/user/tasks/${id}/runs`, { params: { limit } })
 }
 
+/** 立即运行一次：真跑动作、写执行记录，不改定时 */
+export const runTaskNow = (id) => api.post(`/user/tasks/${id}/run`)
+
 /** 更新任务（乐观锁，必须带 version） */
 export const updateTask = (id, payload) => api.put(`/user/tasks/${id}`, payload)
 
